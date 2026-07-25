@@ -2,7 +2,7 @@
 # TypeScript 7.0 Compiler API compatibility.
 #
 # NOTE: this file lives here as documentation. In a consumer repo, reference the
-# published action instead of "./":  uses: OWNER/ts7-compat-guard@v1
+# published action instead of "./":  uses: Booyaka101/ts7-compat-guard@v1
 name: TS7 Compatibility Guard
 on:
   pull_request:
@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Basic gate: fail the build on an active TypeScript 7.0 conflict.
-      - uses: ./                      # consumers: OWNER/ts7-compat-guard@v1
+      - uses: ./                      # consumers: Booyaka101/ts7-compat-guard@v1
         with:
           package-dir: .
           mode: fail
@@ -27,7 +27,7 @@ jobs:
           # ignore: 'ts-node'        # comma-separated packages to skip
 
       # Optional: also surface findings in the Security tab via code scanning.
-      - uses: ./                      # consumers: OWNER/ts7-compat-guard@v1
+      - uses: ./                      # consumers: Booyaka101/ts7-compat-guard@v1
         if: always()
         with:
           package-dir: .

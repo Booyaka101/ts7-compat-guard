@@ -56,7 +56,7 @@ test/ (84 checks) + fixtures (ts7-vue, ts6-vue, ts7-clean, no-typescript, overri
 ## Next steps (distribution — owner action, NOT done here per no-publish/no-account rules)
 1. `git init`, commit everything **including `dist/`**, push to public GitHub repo (replace OWNER placeholders).
 2. `npm publish` as `ts7-compat-guard` (needs npm login).
-3. Tag `v1` → consumers use `uses: OWNER/ts7-compat-guard@v1`.
+3. Tag `v1` → consumers use `uses: Booyaka101/ts7-compat-guard@v1`.
 4. Highest-signal launch: short post to the live "Add support for TypeScript 7" threads
    (nestjs/nest-cli#3479, vercel/next.js#95633, cypress-io/cypress#34258) — exact audience hitting this wall.
 5. Grow src/db.json as framework packages confirm TS7 support; consider a `--fix` mode.

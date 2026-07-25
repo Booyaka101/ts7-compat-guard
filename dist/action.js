@@ -2644,11 +2644,11 @@ var require_package = __commonJS({
       },
       repository: {
         type: "git",
-        url: "git+https://github.com/OWNER/ts7-compat-guard.git"
+        url: "git+https://github.com/Booyaka101/ts7-compat-guard.git"
       },
-      homepage: "https://github.com/OWNER/ts7-compat-guard#readme",
+      homepage: "https://github.com/Booyaka101/ts7-compat-guard#readme",
       bugs: {
-        url: "https://github.com/OWNER/ts7-compat-guard/issues"
+        url: "https://github.com/Booyaka101/ts7-compat-guard/issues"
       }
     };
   }

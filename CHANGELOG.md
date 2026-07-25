@@ -31,4 +31,4 @@ Initial release.
 - 84 tests covering core, report, SARIF, CLI (in-process + spawned), the Action,
   and the bundled `dist`.
 
-[1.0.0]: https://github.com/OWNER/ts7-compat-guard/releases/tag/v1.0.0
+[1.0.0]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v1.0.0
