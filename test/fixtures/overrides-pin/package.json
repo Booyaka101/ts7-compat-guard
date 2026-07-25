@@ -1,0 +1,11 @@
+{
+  "name": "overrides-pinned-app",
+  "version": "0.0.0",
+  "devDependencies": {
+    "typescript": "^7.0.0",
+    "@vue/language-tools": "^2.1.0"
+  },
+  "overrides": {
+    "typescript": "^6.5.0"
+  }
+}

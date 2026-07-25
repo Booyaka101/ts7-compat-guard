@@ -1,0 +1,7 @@
+node_modules/
+*.tgz
+*.log
+npm-debug.log*
+.DS_Store
+*.sarif
+test/.tmp-*

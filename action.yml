@@ -1,0 +1,52 @@
+name: ts7-compat-guard
+description: >-
+  Detect TypeScript 7.0 Compiler API incompatibilities in your package.json
+  before they break framework type-checking (Vue/Volar, Astro, Svelte, MDX,
+  Angular, ts-node, ts-morph, typescript-eslint, and more).
+author: ts7-compat-guard
+branding:
+  icon: shield
+  color: blue
+inputs:
+  package-dir:
+    description: Directory containing the package.json to scan.
+    required: false
+    default: .
+  mode:
+    description: >-
+      fail | warn. `fail` exits the action with a failure when TypeScript 7.0
+      is detected alongside conflicting packages. `warn` never fails the build.
+    required: false
+    default: fail
+  recursive:
+    description: >-
+      Scan every package.json under package-dir (skips node_modules, build
+      output, dotfolders). Set to "true" for monorepos.
+    required: false
+    default: 'false'
+  ignore:
+    description: Comma-separated package names to exclude from conflict detection.
+    required: false
+    default: ''
+  sarif-file:
+    description: >-
+      If set, write a SARIF 2.1.0 report to this path (upload it with
+      github/codeql-action/upload-sarif to surface alerts in the Security tab).
+    required: false
+    default: ''
+  config:
+    description: Read .ts7guardrc.json from package-dir. Set "false" to disable.
+    required: false
+    default: 'true'
+outputs:
+  ts7:
+    description: '"true" if the typescript dependency resolves to >= 7.0.0.'
+  conflict-count:
+    description: Number of conflicting packages found.
+  status:
+    description: One of "conflict", "warning", or "clean".
+  json:
+    description: Full JSON report as a string.
+runs:
+  using: node20
+  main: dist/action.js

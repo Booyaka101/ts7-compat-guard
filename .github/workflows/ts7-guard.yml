@@ -1,0 +1,39 @@
+# Example consumer workflow — copy into any repo to gate PRs on
+# TypeScript 7.0 Compiler API compatibility.
+#
+# NOTE: this file lives here as documentation. In a consumer repo, reference the
+# published action instead of "./":  uses: OWNER/ts7-compat-guard@v1
+name: TS7 Compatibility Guard
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ts7-compat:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # only needed for the SARIF upload step
+    steps:
+      - uses: actions/checkout@v4
+
+      # Basic gate: fail the build on an active TypeScript 7.0 conflict.
+      - uses: ./                      # consumers: OWNER/ts7-compat-guard@v1
+        with:
+          package-dir: .
+          mode: fail
+          # recursive: 'true'        # uncomment for a monorepo
+          # ignore: 'ts-node'        # comma-separated packages to skip
+
+      # Optional: also surface findings in the Security tab via code scanning.
+      - uses: ./                      # consumers: OWNER/ts7-compat-guard@v1
+        if: always()
+        with:
+          package-dir: .
+          mode: warn                  # don't double-fail; the gate above already failed
+          sarif-file: ts7-compat.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ts7-compat.sarif

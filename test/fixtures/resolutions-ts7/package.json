@@ -1,0 +1,10 @@
+{
+  "name": "resolutions-ts7-app",
+  "version": "0.0.0",
+  "devDependencies": {
+    "ts-morph": "^23.0.0"
+  },
+  "resolutions": {
+    "typescript": "7.0.2"
+  }
+}

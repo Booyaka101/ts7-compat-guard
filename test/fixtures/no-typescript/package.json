@@ -1,0 +1,7 @@
+{
+  "name": "no-ts-app",
+  "version": "0.0.0",
+  "dependencies": {
+    "ts-morph": "^23.0.0"
+  }
+}

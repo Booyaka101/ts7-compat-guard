@@ -1,0 +1,12 @@
+{
+  "name": "ts7-vue-app",
+  "version": "0.0.0",
+  "dependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.0",
+    "@vue/language-tools": "^2.1.0",
+    "vue-tsc": "^2.1.0"
+  }
+}

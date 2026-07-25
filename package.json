@@ -1,0 +1,70 @@
+{
+  "name": "ts7-compat-guard",
+  "version": "1.0.0",
+  "description": "Detect TypeScript 7.0 Compiler API incompatibilities in package.json before they break framework type-checking (Vue/Volar, Astro, Svelte, MDX, Angular, ts-node, ts-morph, typescript-eslint, and more). GitHub Action + npx CLI.",
+  "bin": {
+    "ts7-compat-guard": "src/cli.js"
+  },
+  "main": "src/core.js",
+  "exports": {
+    ".": "./src/core.js",
+    "./report": "./src/report.js",
+    "./sarif": "./src/sarif.js",
+    "./db.json": "./src/db.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/",
+    "dist/",
+    "action.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "esbuild src/action.js --bundle --platform=node --target=node20 --outfile=dist/action.js",
+    "build:check": "npm run build && git diff --exit-code -- dist/ || (echo 'dist/ is out of date — commit the rebuilt bundle' && exit 1)",
+    "test": "node test/run.js",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "typescript",
+    "typescript-7",
+    "compiler-api",
+    "compatibility",
+    "migration",
+    "vue",
+    "volar",
+    "astro",
+    "svelte",
+    "mdx",
+    "angular",
+    "ts-morph",
+    "ts-node",
+    "typescript-eslint",
+    "github-action",
+    "ci",
+    "linter",
+    "sarif"
+  ],
+  "author": "ts7-compat-guard contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "semver": "^7.6.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/ts7-compat-guard.git"
+  },
+  "homepage": "https://github.com/OWNER/ts7-compat-guard#readme",
+  "bugs": {
+    "url": "https://github.com/OWNER/ts7-compat-guard/issues"
+  }
+}
