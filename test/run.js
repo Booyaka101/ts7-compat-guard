@@ -212,7 +212,7 @@ test('absent config -> {}', () => assert.deepStrictEqual(core.loadConfig(FIX('ts
 section('report');
 test('human report (ts7) has CONFLICT + Fix', () => {
   const text = report.humanReport(core.analyzeDir(FIX('ts7-vue')), { color: false }).join('\n');
-  assert.ok(text.includes('=== TypeScript 7.0 Toolchain Conflicts ==='));
+  assert.ok(text.includes('=== TypeScript 7.0 / tsgo Readiness ==='));
   assert.ok(/CONFLICT: @vue\/language-tools/.test(text));
   assert.ok(/Fix:/.test(text));
 });
@@ -457,6 +457,207 @@ if (fs.existsSync(DIST)) {
     assert.ok(!/require\(['"]\.\.\/src/.test(src));
   });
 }
+
+// ==================== v2: tsconfig readiness ====================
+const tsc = require('../src/tsconfig');
+
+section('tsconfig: JSONC parsing');
+test('stripComments removes // and /* */ but preserves // inside strings', () => {
+  const src = '{\n  // a comment\n  "url": "https://example.com//x", /* blk */\n  "a": 1\n}';
+  const parsed = tsc.parseJsonc(src);
+  assert.strictEqual(parsed.url, 'https://example.com//x');
+  assert.strictEqual(parsed.a, 1);
+});
+test('removeTrailingCommas drops trailing commas (objects + arrays)', () => {
+  const parsed = tsc.parseJsonc('{ "a": [1, 2, ], "b": { "c": 3, }, }');
+  assert.deepStrictEqual(parsed.a, [1, 2]);
+  assert.strictEqual(parsed.b.c, 3);
+});
+test('trailing-comma remover does not touch commas inside strings', () => {
+  const parsed = tsc.parseJsonc('{ "a": "x, ]", "b": "y, }" }');
+  assert.strictEqual(parsed.a, 'x, ]');
+  assert.strictEqual(parsed.b, 'y, }');
+});
+test('locateKey returns 1-based line', () => {
+  const raw = '{\n  "compilerOptions": {\n    "baseUrl": "."\n  }\n}';
+  assert.strictEqual(tsc.locateKey(raw, 'baseUrl').line, 3);
+  assert.strictEqual(tsc.locateKey(raw, 'missing').line, 1);
+});
+
+section('tsconfig: removed options (analyze)');
+test('ts7 + removed options -> 3 tsconfig conflicts, exit-worthy', () => {
+  const r = core.analyzeDir(FIX('ts7-tsconfig'));
+  const ids = r.tsconfig.findings.map((f) => f.id).sort();
+  assert.deepStrictEqual(ids, ['base-url', 'module-resolution-legacy', 'target-es5']);
+  assert.ok(r.tsconfig.findings.every((f) => f.severity === 'conflict'));
+  assert.strictEqual(r.hasActiveConflict, true);
+  assert.strictEqual(r.activeConflictCount, 3);
+});
+test('tsconfig findings carry a line number', () => {
+  const r = core.analyzeDir(FIX('ts7-tsconfig'));
+  const baseUrl = r.tsconfig.findings.find((f) => f.id === 'base-url');
+  assert.strictEqual(baseUrl.line, 6);
+});
+test('ts6 + removed options -> warnings, not active', () => {
+  const r = core.analyzeDir(FIX('ts6-tsconfig'));
+  assert.ok(r.tsconfig.findings.every((f) => f.severity === 'warning'));
+  assert.strictEqual(r.hasActiveConflict, false);
+  assert.ok(r.warningCount >= 2);
+});
+test('clean tsconfig on ts7 -> no findings', () => {
+  const r = core.analyzeDir(FIX('tsconfig-clean'));
+  assert.strictEqual(r.tsconfig.findings.length, 0);
+  assert.strictEqual(r.risks.length, 0);
+  assert.strictEqual(r.hasActiveConflict, false);
+});
+test('extends: options inherited from a relative base are detected', () => {
+  const r = core.analyzeDir(FIX('tsconfig-extends'));
+  const ids = r.tsconfig.findings.map((f) => f.id).sort();
+  assert.ok(ids.includes('base-url'));
+  assert.ok(ids.includes('target-es5'));
+});
+test('JSONC tsconfig parses and finds baseUrl', () => {
+  const r = core.analyzeDir(FIX('tsconfig-jsonc'));
+  assert.ok(r.tsconfig.findings.some((f) => f.id === 'base-url'));
+  assert.strictEqual(r.tsconfig.parseError, null);
+});
+test('--no-tsconfig disables tsconfig analysis', () => {
+  const r = core.analyzeDir(FIX('ts7-tsconfig'), { tsconfig: false });
+  assert.strictEqual(r.tsconfig.present, false);
+  assert.strictEqual(r.tsconfig.findings.length, 0);
+});
+test('esModuleInterop:false / alwaysStrict:false detected', () => {
+  const r = core.analyze({ devDependencies: { typescript: '^7' } });
+  const ev = tsc.evaluateTsconfig(
+    { options: { esModuleInterop: false, alwaysStrict: false }, raw: '', references: [] },
+    { ts7: true, deps: {} }
+  );
+  const ids = ev.findings.map((f) => f.id).sort();
+  assert.ok(ids.includes('es-module-interop-false'));
+  assert.ok(ids.includes('always-strict-false'));
+  assert.ok(r.ts7);
+});
+test('module amd + downlevelIteration + out detected', () => {
+  const ev = tsc.evaluateTsconfig(
+    { options: { module: 'amd', downlevelIteration: true, out: './b.js' }, raw: '', references: [] },
+    { ts7: true, deps: {} }
+  );
+  const ids = ev.findings.map((f) => f.id).sort();
+  assert.deepStrictEqual(ids, ['downlevel-iteration', 'module-legacy', 'out']);
+});
+test('references[].prepend detected', () => {
+  const ev = tsc.evaluateTsconfig(
+    { options: {}, raw: '', references: [{ path: '../x', prepend: true }] },
+    { ts7: true, deps: {} }
+  );
+  assert.ok(ev.findings.some((f) => f.id === 'references-prepend'));
+});
+
+section('tsconfig: advisories');
+test('advisories: strict-default + emitDecoratorMetadata w/ framework context', () => {
+  const r = core.analyzeDir(FIX('tsconfig-advisories'));
+  const ids = r.risks.map((a) => a.id).sort();
+  assert.deepStrictEqual(ids, ['emit-decorator-metadata', 'strict-default']);
+  const dec = r.risks.find((a) => a.id === 'emit-decorator-metadata');
+  assert.ok(/@nestjs\/core/.test(dec.reason));
+  assert.strictEqual(r.hasActiveConflict, false); // advisories never fail
+});
+test('strict advisory suppressed when strict:true', () => {
+  const ev = tsc.evaluateTsconfig(
+    { options: { strict: true }, raw: '', references: [] },
+    { ts7: true, deps: {} }
+  );
+  assert.ok(!ev.advisories.some((a) => a.id === 'strict-default'));
+});
+test('ignoreDeprecations advisory', () => {
+  const ev = tsc.evaluateTsconfig(
+    { options: { strict: true, ignoreDeprecations: '6.0' }, raw: '', references: [] },
+    { ts7: true, deps: {} }
+  );
+  assert.ok(ev.advisories.some((a) => a.id === 'ignore-deprecations'));
+});
+
+section('tsconfig: report + status');
+test('status advisory when only advisories present', () => {
+  assert.strictEqual(report.jsonReport(core.analyzeDir(FIX('tsconfig-advisories'))).status, 'advisory');
+});
+test('human report shows [tsconfig.json] + [advisories] sections', () => {
+  const conflictText = report.humanReport(core.analyzeDir(FIX('ts7-tsconfig')), { color: false }).join('\n');
+  assert.ok(/\[tsconfig\.json\]/.test(conflictText));
+  assert.ok(/CONFLICT: baseUrl/.test(conflictText));
+  const advText = report.humanReport(core.analyzeDir(FIX('tsconfig-advisories')), { color: false }).join('\n');
+  assert.ok(/\[advisories\]/.test(advText));
+  assert.ok(/ADVISORY: strict is now on by default/.test(advText));
+});
+test('json report includes tsconfig + advisories arrays', () => {
+  const j = report.jsonReport(core.analyzeDir(FIX('ts7-tsconfig')));
+  assert.ok(Array.isArray(j.tsconfig.findings) && j.tsconfig.findings.length === 3);
+  assert.ok(j.tsconfig.findings[0].line >= 1);
+  assert.strictEqual(j.advisoryCount, j.advisories.length);
+});
+
+section('tsconfig: SARIF');
+test('SARIF includes tsconfig rule + points at tsconfig line', () => {
+  const s = sarif.buildSarif([core.analyzeDir(FIX('ts7-tsconfig'))], { root: FIX('ts7-tsconfig'), version: '2.0.0' });
+  const tsResult = s.runs[0].results.find((x) => x.ruleId.startsWith('ts7-compat/tsconfig/'));
+  assert.ok(tsResult, 'has a tsconfig result');
+  assert.strictEqual(tsResult.level, 'error');
+  const loc = tsResult.locations[0].physicalLocation;
+  assert.ok(/tsconfig\.json$/.test(loc.artifactLocation.uri));
+  assert.ok(loc.region.startLine >= 3);
+});
+test('SARIF advisory -> note level', () => {
+  const s = sarif.buildSarif([core.analyzeDir(FIX('tsconfig-advisories'))], { root: FIX('tsconfig-advisories') });
+  const notes = s.runs[0].results.filter((x) => x.level === 'note');
+  assert.ok(notes.length >= 2);
+  assert.ok(notes.every((x) => x.ruleId.startsWith('ts7-compat/risk/')));
+});
+test('SARIF dep rule id namespaced under dep/', () => {
+  const s = sarif.buildSarif([core.analyzeDir(FIX('ts7-vue'))], { root: FIX('ts7-vue') });
+  assert.ok(s.runs[0].results.every((x) => x.ruleId.startsWith('ts7-compat/dep/')));
+});
+
+section('tsconfig: CLI');
+test('CLI ts7 + removed tsconfig -> CONFLICT + exit 1', () => {
+  const { code, out } = runCli(['--dir', FIX('ts7-tsconfig')]);
+  assert.ok(/CONFLICT: baseUrl/.test(out));
+  assert.strictEqual(code, 1);
+});
+test('CLI advisories-only -> exit 0, ADVISORY shown', () => {
+  const { code, out } = runCli(['--dir', FIX('tsconfig-advisories')]);
+  assert.ok(/ADVISORY:/.test(out) && !/CONFLICT:/.test(out));
+  assert.strictEqual(code, 0);
+});
+test('CLI --no-tsconfig ignores tsconfig conflicts -> exit 0', () => {
+  const { code } = runCli(['--dir', FIX('ts7-tsconfig'), '--no-tsconfig']);
+  assert.strictEqual(code, 0);
+});
+test('CLI ts6 + removed tsconfig -> WARNING, exit 0', () => {
+  const { code, out } = runCli(['--dir', FIX('ts6-tsconfig')]);
+  assert.ok(/WARNING: baseUrl/.test(out));
+  assert.strictEqual(code, 0);
+});
+
+section('tsconfig: Action');
+test('action tsconfig conflict -> exit 1 + ::error file=', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts7-tsconfig'), INPUT_MODE: 'fail' });
+  assert.strictEqual(r.status, 1);
+  assert.ok(/::error file=.*tsconfig\.json,line=\d+/.test(r.stdout), r.stdout);
+});
+test('action advisories -> exit 0 + ::notice', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('tsconfig-advisories'), INPUT_MODE: 'fail' });
+  assert.strictEqual(r.status, 0);
+  assert.ok(/::notice.*ADVISORY:/.test(r.stdout), r.stdout);
+});
+test('action emits tsconfig-count + advisory-count outputs', () => {
+  const outFile = path.join(__dirname, '.tmp-ghout2');
+  fs.writeFileSync(outFile, '');
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts7-tsconfig'), INPUT_MODE: 'warn', GITHUB_OUTPUT: outFile });
+  const outs = fs.readFileSync(outFile, 'utf8');
+  assert.ok(/tsconfig-count<</.test(outs) && /advisory-count<</.test(outs), outs);
+  assert.strictEqual(r.status, 0);
+  fs.unlinkSync(outFile);
+});
 
 // -------------------- summary --------------------
 process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

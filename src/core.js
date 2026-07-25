@@ -5,6 +5,7 @@ const path = require('node:path');
 const semver = require('semver');
 
 const builtinDb = require('./db.json');
+const tsconfig = require('./tsconfig');
 
 const DEP_FIELDS = [
   'dependencies',
@@ -194,7 +195,7 @@ function analyze(pkg, opts = {}) {
   conflicts.sort((a, b) => a.pkg.localeCompare(b.pkg));
   ignored.sort((a, b) => a.pkg.localeCompare(b.pkg));
 
-  return {
+  const result = {
     ts7: tsInfo.ts7,
     typescript: {
       raw: tsInfo.raw,
@@ -205,7 +206,29 @@ function analyze(pkg, opts = {}) {
     conflicts,
     ignored,
     name: pkg.name,
+    tsconfig: { present: false, path: null, absPath: null, findings: [], parseError: null, unresolvedExtends: [] },
+    risks: [],
   };
+  return finalize(result);
+}
+
+/**
+ * Compute derived, cross-pillar fields from a result's dependency conflicts and
+ * tsconfig findings: whether any *active* (build-breaking on TS7) conflict
+ * exists, plus warning/advisory counts. A single source of truth for exit codes
+ * and summaries.
+ */
+function finalize(result) {
+  const tsFindings = (result.tsconfig && result.tsconfig.findings) || [];
+  const activeDep = result.ts7 ? result.conflicts.length : 0;
+  const activeTsconfig = tsFindings.filter((f) => f.severity === 'conflict').length;
+  result.activeConflictCount = activeDep + activeTsconfig;
+  result.hasActiveConflict = result.activeConflictCount > 0;
+  result.warningCount =
+    (result.ts7 ? 0 : result.conflicts.length) +
+    tsFindings.filter((f) => f.severity === 'warning').length;
+  result.advisoryCount = (result.risks || []).length;
+  return result;
 }
 
 function analyzeDir(dir, opts = {}) {
@@ -213,7 +236,21 @@ function analyzeDir(dir, opts = {}) {
   const result = analyze(pkg, opts);
   result.pkgPath = pkgPath;
   result.dir = dir;
-  return result;
+
+  if (opts.tsconfig !== false) {
+    const deps = mergeDeps(pkg);
+    const ts = tsconfig.analyzeTsconfigDir(dir, { ts7: result.ts7, deps, root: dir });
+    result.tsconfig = {
+      present: ts.present,
+      path: ts.path,
+      absPath: ts.absPath,
+      findings: ts.findings,
+      parseError: ts.parseError,
+      unresolvedExtends: ts.unresolvedExtends,
+    };
+    result.risks = ts.advisories || [];
+  }
+  return finalize(result);
 }
 
 const DEFAULT_SKIP_DIRS = new Set([
@@ -279,13 +316,16 @@ function analyzeMany(dirs, opts = {}) {
       results.push({ dir, error: e.message, conflicts: [], ignored: [], ts7: false });
     }
   }
+  const tsFindings = (r) => (r.tsconfig && r.tsconfig.findings) || [];
   const summary = {
     packagesScanned: results.length,
-    packagesWithConflicts: results.filter((r) => r.conflicts && r.conflicts.length > 0).length,
-    activeConflictPackages: results.filter(
-      (r) => r.ts7 && r.conflicts && r.conflicts.length > 0
+    packagesWithConflicts: results.filter(
+      (r) => (r.conflicts && r.conflicts.length > 0) || tsFindings(r).length > 0
     ).length,
+    activeConflictPackages: results.filter((r) => r.hasActiveConflict).length,
     totalConflicts: results.reduce((n, r) => n + (r.conflicts ? r.conflicts.length : 0), 0),
+    totalTsconfigFindings: results.reduce((n, r) => n + tsFindings(r).length, 0),
+    totalAdvisories: results.reduce((n, r) => n + ((r.risks && r.risks.length) || 0), 0),
     errors: results.filter((r) => r.error).length,
   };
   return { results, summary };
@@ -293,10 +333,12 @@ function analyzeMany(dirs, opts = {}) {
 
 /**
  * Exit code for a single result given a mode.
- * mode 'fail': 1 when ts7 && conflicts>0. mode 'warn': always 0.
+ * mode 'fail': 1 when an active (build-breaking on TS7) conflict exists —
+ * a Compiler-API dependency on TS7 OR a removed tsconfig option on TS7.
+ * Advisories and "will break on upgrade" warnings never fail. mode 'warn': always 0.
  */
 function exitCodeFor(result, mode) {
-  if (mode === 'fail' && result.ts7 && result.conflicts.length > 0) return 1;
+  if (mode === 'fail' && result.hasActiveConflict) return 1;
   return 0;
 }
 
@@ -309,9 +351,11 @@ function exitCodeForMany(agg, mode) {
 module.exports = {
   db: builtinDb,
   builtinDb,
+  tsconfig,
   analyze,
   analyzeDir,
   analyzeMany,
+  finalize,
   analyzeTypescriptVersion,
   getTypescriptSpec,
   readOverrideTypescript,

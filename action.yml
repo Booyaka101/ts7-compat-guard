@@ -1,8 +1,9 @@
 name: ts7-compat-guard
 description: >-
-  Detect TypeScript 7.0 Compiler API incompatibilities in your package.json
-  before they break framework type-checking (Vue/Volar, Astro, Svelte, MDX,
-  Angular, ts-node, ts-morph, typescript-eslint, and more).
+  TypeScript 7.0 / tsgo readiness gate — detects Compiler-API dependencies,
+  removed tsconfig.json options (with exact line numbers), and behavioural
+  advisories before they break your build. Manifest/config only, no false
+  positives. CLI + SARIF for code scanning.
 author: ts7-compat-guard
 branding:
   icon: shield
@@ -42,9 +43,13 @@ outputs:
   ts7:
     description: '"true" if the typescript dependency resolves to >= 7.0.0.'
   conflict-count:
-    description: Number of conflicting packages found.
+    description: Number of build-breaking conflicts (Compiler-API deps + removed tsconfig options on TS7).
+  tsconfig-count:
+    description: Number of removed/changed tsconfig.json options found.
+  advisory-count:
+    description: Number of behavioural advisories (non-failing).
   status:
-    description: One of "conflict", "warning", or "clean".
+    description: One of "conflict", "warning", "advisory", or "clean".
   json:
     description: Full JSON report as a string.
 runs:

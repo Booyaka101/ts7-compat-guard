@@ -12,7 +12,13 @@ const {
 } = require('./report');
 const { buildSarif } = require('./sarif');
 
-const USAGE = `ts7-compat-guard — detect TypeScript 7.0 Compiler API incompatibilities
+const USAGE = `ts7-compat-guard — TypeScript 7.0 / tsgo readiness scanner
+
+Checks three things, config- and manifest-level only (no source-file scanning,
+so no false positives):
+  1. dependencies that embed the removed programmatic Compiler API
+  2. tsconfig.json options removed in TypeScript 7.0 (with exact line numbers)
+  3. behavioural advisories (strict-by-default, emitDecoratorMetadata, …)
 
 Usage:
   npx ts7-compat-guard [options]
@@ -25,11 +31,12 @@ Options:
   --sarif             Output SARIF 2.1.0 (for GitHub code scanning) to stdout
   --sarif-file <p>    Write SARIF 2.1.0 to a file (implies SARIF generation)
   --mode <m>          fail | warn  (default: fail)
-                        fail: exit 1 when a real TS7 conflict is present
+                        fail: exit 1 when a build-breaking conflict is present
                         warn: always exit 0
   --ignore <list>     Comma-separated package names to exclude from conflicts
   --db <path>         Path to a JSON file of extra db entries to merge
                       ({ "pkg": { "reason", "fix" } })
+  --no-tsconfig       Skip tsconfig.json analysis (dependencies only)
   --no-config         Do not read .ts7guardrc.json
   -h, --help          Show this help
   -v, --version       Show version
@@ -38,8 +45,9 @@ Config file (.ts7guardrc.json in --dir):
   { "ignore": ["pkg"], "db": { "pkg": {"reason","fix"} }, "mode": "warn" }
 
 Exit codes:
-  0  no active conflicts (or mode=warn)
-  1  TypeScript 7.0 detected AND conflicting packages present (mode=fail)
+  0  no build-breaking conflicts (or mode=warn). Warnings/advisories do not fail.
+  1  a build-breaking TypeScript 7.0 conflict is present (mode=fail):
+     a Compiler-API dependency on TS7, or a removed tsconfig option on TS7
   2  usage / runtime error (e.g. no package.json)
 `;
 
@@ -56,6 +64,7 @@ function parseArgs(argv) {
     ignore: [],
     db: null,
     config: true,
+    tsconfig: true,
     help: false,
     version: false,
   };
@@ -93,6 +102,7 @@ function parseArgs(argv) {
     else if (a === '--db') opts.db = takeValue(++i, '--db');
     else if (a.startsWith('--db=')) opts.db = a.slice(5);
     else if (a === '--no-config') opts.config = false;
+    else if (a === '--no-tsconfig') opts.tsconfig = false;
     else if (a === '-h' || a === '--help') opts.help = true;
     else if (a === '-v' || a === '--version') opts.version = true;
     else throw new UsageError(`Unknown argument: ${a}`);
@@ -171,7 +181,7 @@ function run(argv, io = {}) {
   const mode =
     argvHasMode(argv) ? opts.mode : config.mode === 'warn' || config.mode === 'fail' ? config.mode : opts.mode;
 
-  const analyzeOpts = { extraDb, ignore };
+  const analyzeOpts = { extraDb, ignore, tsconfig: opts.tsconfig };
   const color = !!isTTY && !process.env.NO_COLOR;
 
   // ---- recursive ----
@@ -226,7 +236,7 @@ function run(argv, io = {}) {
     out(humanReport(result, { color }).join('\n') + '\n');
   }
 
-  if (mode === 'fail' && result.ts7 && result.conflicts.length > 0) return 1;
+  if (mode === 'fail' && result.hasActiveConflict) return 1;
   return 0;
 }
 

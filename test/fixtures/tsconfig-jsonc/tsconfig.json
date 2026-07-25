@@ -1,0 +1,9 @@
+{
+  // project config with comments
+  "compilerOptions": {
+    "target": "es2022",
+    "tsBuildInfoFile": "./dist//cache.tsbuildinfo",
+    "baseUrl": "./src", /* removed in TS7 */
+    "strict": true,
+  },
+}

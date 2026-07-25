@@ -59,6 +59,7 @@ function appendSummary(md) {
 }
 
 function annotateConflicts(result) {
+  // dependencies
   for (const conf of result.conflicts) {
     if (result.ts7) {
       emit('error', `CONFLICT: ${conf.pkg} — ${conf.reason} Fix: ${conf.fix}`);
@@ -68,6 +69,27 @@ function annotateConflicts(result) {
         `${conf.pkg} will break when typescript is upgraded to ^7 — plan migration now. Fix: ${conf.fix}`
       );
     }
+  }
+  // tsconfig removed options — annotate on the tsconfig.json file/line,
+  // pathed relative to the workspace so GitHub links the annotation correctly.
+  const tsFindings = (result.tsconfig && result.tsconfig.findings) || [];
+  const tsFile =
+    result.tsconfig && result.tsconfig.absPath
+      ? path.relative(process.cwd(), result.tsconfig.absPath).split(path.sep).join('/')
+      : result.tsconfig && result.tsconfig.path;
+  for (const f of tsFindings) {
+    const loc = tsFile ? `file=${tsFile},line=${f.line},col=${f.column}` : '';
+    const cmd = f.severity === 'conflict' ? 'error' : 'warning';
+    const prefix = f.severity === 'conflict' ? 'CONFLICT' : 'WARNING';
+    emit(
+      loc ? `${cmd} ${loc}` : cmd,
+      `${prefix}: tsconfig ${f.option} — ${f.reason} Fix: ${f.fix}`
+    );
+  }
+  // advisories — non-failing notices
+  for (const a of result.risks || []) {
+    const loc = tsFile ? `file=${tsFile},line=${a.line},col=${a.column}` : '';
+    emit(loc ? `notice ${loc}` : 'notice', `ADVISORY: ${a.title} — ${a.reason} Fix: ${a.fix}`);
   }
 }
 
@@ -125,14 +147,18 @@ function main() {
     if (sarifFile) writeSarif(agg.results, resolvedDir, version, sarifFile);
 
     const json = jsonReportMany(agg, { root: resolvedDir });
+    const activeCount = agg.results.reduce((n, r) => n + (r.activeConflictCount || 0), 0);
     setOutput('ts7', String(agg.results.some((r) => r.ts7)));
-    setOutput('conflict-count', String(agg.summary.totalConflicts));
-    setOutput('status', agg.summary.activeConflictPackages > 0 ? 'conflict' : agg.summary.packagesWithConflicts > 0 ? 'warning' : 'clean');
+    setOutput('conflict-count', String(activeCount));
+    setOutput('tsconfig-count', String(agg.summary.totalTsconfigFindings));
+    setOutput('advisory-count', String(agg.summary.totalAdvisories));
+    setOutput('status', agg.summary.activeConflictPackages > 0 ? 'conflict' : agg.summary.packagesWithConflicts > 0 ? 'warning' : agg.summary.totalAdvisories > 0 ? 'advisory' : 'clean');
     setOutput('json', JSON.stringify(json));
     appendSummary(
       `### ts7-compat-guard\n\nScanned **${agg.summary.packagesScanned}** package(s): ` +
         `**${agg.summary.activeConflictPackages}** with active conflicts, ` +
-        `**${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings.`
+        `**${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings, ` +
+        `**${agg.summary.totalAdvisories}** advisory(ies).`
     );
 
     if (effectiveMode === 'fail' && agg.summary.activeConflictPackages > 0) {
@@ -157,24 +183,29 @@ function main() {
   process.stdout.write(humanReport(result, { color: false }).join('\n') + '\n');
 
   const json = jsonReport(result);
+  const tsCount = (result.tsconfig && result.tsconfig.findings.length) || 0;
   setOutput('ts7', String(result.ts7));
-  setOutput('conflict-count', String(result.conflicts.length));
+  setOutput('conflict-count', String(result.activeConflictCount));
+  setOutput('tsconfig-count', String(tsCount));
+  setOutput('advisory-count', String(result.advisoryCount));
   setOutput('status', json.status);
   setOutput('json', JSON.stringify(json));
 
-  if (result.conflicts.length > 0) annotateConflicts(result);
-  else emit('notice', 'ts7-compat-guard: no TypeScript 7.0 Compiler API conflicts found.');
+  const anyFinding = result.conflicts.length > 0 || tsCount > 0 || result.advisoryCount > 0;
+  if (anyFinding) annotateConflicts(result);
+  else emit('notice', 'ts7-compat-guard: no TypeScript 7.0 / tsgo readiness issues found.');
 
   if (sarifFile) writeSarif([result], resolvedDir, version, sarifFile);
 
   appendSummary(
     `### ts7-compat-guard\n\n\`typescript\` ${result.typescript.raw || 'n/a'} → ` +
       `${result.ts7 ? 'TypeScript 7.0 detected' : 'TypeScript 6.x'} · ` +
-      `**${result.conflicts.length}** conflict(s) (status: ${json.status}).`
+      `**${result.activeConflictCount}** conflict(s), **${result.warningCount}** warning(s), ` +
+      `**${result.advisoryCount}** advisory(ies) (status: ${json.status}).`
   );
 
-  if (effectiveMode === 'fail' && result.ts7 && result.conflicts.length > 0) {
-    emit('error', `ts7-compat-guard failed: ${result.conflicts.length} TypeScript 7.0 conflict(s) detected.`);
+  if (effectiveMode === 'fail' && result.hasActiveConflict) {
+    emit('error', `ts7-compat-guard failed: ${result.activeConflictCount} build-breaking TypeScript 7.0 conflict(s) detected.`);
     process.exitCode = 1;
   } else {
     process.exitCode = 0;

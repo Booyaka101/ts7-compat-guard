@@ -5,21 +5,24 @@
  * in GitHub's Security → Code scanning tab. Dependency-free — the schema is
  * simple enough to construct by hand.
  *
- * Rule ids: `ts7-conflict/<pkg>` (error when TS7 active) — we register one rule
- * per distinct package encountered so GitHub can group/track them.
+ * Three finding families, each a distinct rule namespace so GitHub groups them:
+ *   ts7-compat/dep/<pkg>        Compiler-API dependency (package.json)
+ *   ts7-compat/tsconfig/<id>    removed compiler option (tsconfig.json, exact line)
+ *   ts7-compat/risk/<id>        behavioural advisory (tsconfig.json, exact line)
  */
 
 const path = require('node:path');
 
 const SARIF_SCHEMA = 'https://json.schemastore.org/sarif-2.1.0.json';
 const VERSION = '2.1.0';
-
-function ruleIdFor(pkg) {
-  return `ts7-compat/${pkg}`;
-}
+const DEP_HELP = 'https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/';
 
 function toPosix(p) {
   return p.split(path.sep).join('/');
+}
+
+function sanitize(s) {
+  return String(s).replace(/[^a-zA-Z0-9]/g, '_');
 }
 
 /**
@@ -35,47 +38,94 @@ function buildSarif(results, opts = {}) {
   const rulesById = new Map();
   const sarifResults = [];
 
+  const ensureRule = (rule) => {
+    if (!rulesById.has(rule.id)) rulesById.set(rule.id, rule);
+  };
+
+  const location = (uri, line, column) => ({
+    physicalLocation: {
+      artifactLocation: { uri, uriBaseId: '%SRCROOT%' },
+      region: { startLine: line || 1, startColumn: column || 1 },
+    },
+  });
+
   for (const r of results) {
-    if (!r || !r.conflicts) continue;
+    if (!r) continue;
     const pkgPath = r.pkgPath || path.join(r.dir || root, 'package.json');
-    const uri = toPosix(path.relative(root, pkgPath)) || 'package.json';
+    const pkgUri = toPosix(path.relative(root, pkgPath)) || 'package.json';
 
-    for (const conf of r.conflicts) {
-      const ruleId = ruleIdFor(conf.pkg);
+    // ---- dependency conflicts ----
+    for (const conf of r.conflicts || []) {
+      const ruleId = `ts7-compat/dep/${conf.pkg}`;
       const level = r.ts7 ? 'error' : 'warning';
-      if (!rulesById.has(ruleId)) {
-        rulesById.set(ruleId, {
-          id: ruleId,
-          name: `TS7Incompatible_${conf.pkg.replace(/[^a-zA-Z0-9]/g, '_')}`,
-          shortDescription: { text: `${conf.pkg} is incompatible with TypeScript 7.0` },
-          fullDescription: { text: conf.reason },
-          helpUri: 'https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/',
-          help: { text: `Fix: ${conf.fix}` },
-          defaultConfiguration: { level: 'error' },
-          properties: { tags: ['typescript', 'typescript-7', 'compatibility'] },
-        });
-      }
-
-      const messageText = r.ts7
-        ? `CONFLICT: ${conf.pkg} — ${conf.reason} Fix: ${conf.fix}`
-        : `${conf.pkg} will break when typescript is upgraded to ^7 — plan migration now. Fix: ${conf.fix}`;
-
+      ensureRule({
+        id: ruleId,
+        name: `TS7Dep_${sanitize(conf.pkg)}`,
+        shortDescription: { text: `${conf.pkg} is incompatible with TypeScript 7.0` },
+        fullDescription: { text: conf.reason },
+        helpUri: DEP_HELP,
+        help: { text: `Fix: ${conf.fix}` },
+        defaultConfiguration: { level: 'error' },
+        properties: { tags: ['typescript', 'typescript-7', 'tsgo', 'dependency'] },
+      });
       sarifResults.push({
         ruleId,
         level,
-        message: { text: messageText },
-        locations: [
-          {
-            physicalLocation: {
-              artifactLocation: { uri, uriBaseId: '%SRCROOT%' },
-              region: { startLine: 1, startColumn: 1 },
-            },
-          },
-        ],
-        partialFingerprints: {
-          // stable across runs so GitHub dedupes/tracks the alert
-          ts7CompatGuard: `${uri}::${conf.pkg}`,
+        message: {
+          text: r.ts7
+            ? `CONFLICT: ${conf.pkg} — ${conf.reason} Fix: ${conf.fix}`
+            : `${conf.pkg} will break when typescript is upgraded to ^7 — plan migration now. Fix: ${conf.fix}`,
         },
+        locations: [location(pkgUri, 1, 1)],
+        partialFingerprints: { ts7CompatGuard: `${pkgUri}::dep::${conf.pkg}` },
+      });
+    }
+
+    // ---- tsconfig removed options ----
+    const tsFindings = (r.tsconfig && r.tsconfig.findings) || [];
+    const tsUri = r.tsconfig && r.tsconfig.absPath
+      ? toPosix(path.relative(root, r.tsconfig.absPath))
+      : toPosix(path.relative(root, path.join(r.dir || root, 'tsconfig.json')));
+    for (const f of tsFindings) {
+      const ruleId = `ts7-compat/tsconfig/${f.id}`;
+      ensureRule({
+        id: ruleId,
+        name: `TS7Tsconfig_${sanitize(f.id)}`,
+        shortDescription: { text: f.title },
+        fullDescription: { text: f.reason },
+        helpUri: f.helpUri || DEP_HELP,
+        help: { text: `Fix: ${f.fix}` },
+        defaultConfiguration: { level: 'error' },
+        properties: { tags: ['typescript', 'typescript-7', 'tsgo', 'tsconfig'] },
+      });
+      sarifResults.push({
+        ruleId,
+        level: f.severity === 'conflict' ? 'error' : 'warning',
+        message: { text: `${f.option}: ${f.title}. ${f.reason} Fix: ${f.fix}` },
+        locations: [location(tsUri, f.line, f.column)],
+        partialFingerprints: { ts7CompatGuard: `${tsUri}::tsconfig::${f.id}` },
+      });
+    }
+
+    // ---- advisories ----
+    for (const a of r.risks || []) {
+      const ruleId = `ts7-compat/risk/${a.id}`;
+      ensureRule({
+        id: ruleId,
+        name: `TS7Risk_${sanitize(a.id)}`,
+        shortDescription: { text: a.title },
+        fullDescription: { text: a.reason },
+        helpUri: a.helpUri || DEP_HELP,
+        help: { text: `Fix: ${a.fix}` },
+        defaultConfiguration: { level: 'note' },
+        properties: { tags: ['typescript', 'typescript-7', 'tsgo', 'advisory'] },
+      });
+      sarifResults.push({
+        ruleId,
+        level: 'note',
+        message: { text: `${a.title}. ${a.reason} Fix: ${a.fix}` },
+        locations: [location(tsUri, a.line, a.column)],
+        partialFingerprints: { ts7CompatGuard: `${tsUri}::risk::${a.id}` },
       });
     }
   }

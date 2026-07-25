@@ -2102,6 +2102,484 @@ var require_db = __commonJS({
   }
 });
 
+// src/tsconfig.js
+var require_tsconfig = __commonJS({
+  "src/tsconfig.js"(exports2, module2) {
+    "use strict";
+    var fs2 = require("node:fs");
+    var path2 = require("node:path");
+    var HELP_URI = "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/";
+    var DECORATORS_URI = "https://github.com/microsoft/typescript-go/discussions/741";
+    var REMOVED_OPTIONS = [
+      {
+        id: "target-es5",
+        key: "target",
+        test: (o) => {
+          const v = typeof o.target === "string" ? o.target.toLowerCase() : null;
+          return v === "es5" || v === "es3" ? o.target : null;
+        },
+        title: 'target "ES5"/"ES3" removed',
+        reason: 'TypeScript 7.0 drops down-level emit below ES2015; `target: "es5"`/`"es3"` is no longer supported (minimum output is modern ES).',
+        fix: "Raise `target` to `es2015` or later (e.g. `es2022`). Down-level to ES5 with a separate tool (esbuild/swc/Babel) if you still need it."
+      },
+      {
+        id: "downlevel-iteration",
+        key: "downlevelIteration",
+        test: (o) => o.downlevelIteration ? true : null,
+        title: "downlevelIteration removed",
+        reason: "`downlevelIteration` only applied to pre-ES2015 targets, which TypeScript 7.0 no longer supports, so the option is removed.",
+        fix: "Remove `downlevelIteration` and target `es2015`+ (native iteration)."
+      },
+      {
+        id: "module-legacy",
+        key: "module",
+        test: (o) => {
+          const v = typeof o.module === "string" ? o.module.toLowerCase() : null;
+          return v === "amd" || v === "umd" || v === "system" || v === "systemjs" || v === "none" ? o.module : null;
+        },
+        title: "legacy module format removed",
+        reason: "The `amd`, `umd`, `system` and `none` module formats are removed in TypeScript 7.0.",
+        fix: "Use `esnext` (or `preserve`) and let a bundler produce the legacy format if you still need one."
+      },
+      {
+        id: "module-resolution-legacy",
+        key: "moduleResolution",
+        test: (o) => {
+          const v = typeof o.moduleResolution === "string" ? o.moduleResolution.toLowerCase() : null;
+          return v === "node" || v === "node10" || v === "classic" ? o.moduleResolution : null;
+        },
+        title: 'moduleResolution "node"/"node10"/"classic" removed',
+        reason: "The legacy `node` (a.k.a. `node10`) and `classic` resolution modes are removed in TypeScript 7.0.",
+        fix: 'Use `moduleResolution: "bundler"` (apps/bundlers) or `"nodenext"` (Node ESM/CJS).'
+      },
+      {
+        id: "base-url",
+        key: "baseUrl",
+        test: (o) => o.baseUrl != null ? o.baseUrl : null,
+        title: "baseUrl removed",
+        reason: "`baseUrl` is removed in TypeScript 7.0; path mapping is now resolved relative to the tsconfig.json location.",
+        fix: 'Delete `baseUrl` and rewrite `paths` entries relative to the config file (e.g. `"@/*": ["./src/*"]`).'
+      },
+      {
+        id: "es-module-interop-false",
+        key: "esModuleInterop",
+        test: (o) => o.esModuleInterop === false ? false : null,
+        title: "esModuleInterop cannot be disabled",
+        reason: "TypeScript 7.0 assumes `esModuleInterop: true`; explicitly setting it to `false` is no longer allowed.",
+        fix: 'Remove `"esModuleInterop": false` (the default is now `true`).'
+      },
+      {
+        id: "allow-synthetic-default-imports-false",
+        key: "allowSyntheticDefaultImports",
+        test: (o) => o.allowSyntheticDefaultImports === false ? false : null,
+        title: "allowSyntheticDefaultImports cannot be disabled",
+        reason: "`allowSyntheticDefaultImports` is implied by the new interop model and can no longer be set to `false`.",
+        fix: 'Remove `"allowSyntheticDefaultImports": false`.'
+      },
+      {
+        id: "always-strict-false",
+        key: "alwaysStrict",
+        test: (o) => o.alwaysStrict === false ? false : null,
+        title: "alwaysStrict cannot be disabled",
+        reason: "Emitted modules are always in strict mode in TypeScript 7.0; `alwaysStrict: false` is rejected.",
+        fix: 'Remove `"alwaysStrict": false`.'
+      },
+      {
+        id: "out",
+        key: "out",
+        test: (o) => o.out != null ? o.out : null,
+        title: "out removed (use outFile)",
+        reason: "The legacy `out` option (superseded by `outFile` years ago) is removed in TypeScript 7.0.",
+        fix: "Replace `out` with `outFile`, or emit with a bundler."
+      },
+      {
+        id: "imports-not-used-as-values",
+        key: "importsNotUsedAsValues",
+        test: (o) => o.importsNotUsedAsValues != null ? o.importsNotUsedAsValues : null,
+        title: "importsNotUsedAsValues removed",
+        reason: "`importsNotUsedAsValues` was deprecated in favour of `verbatimModuleSyntax` and is removed in TypeScript 7.0.",
+        fix: 'Remove it and set `"verbatimModuleSyntax": true` if you need explicit type-only import elision.'
+      },
+      {
+        id: "preserve-value-imports",
+        key: "preserveValueImports",
+        test: (o) => o.preserveValueImports != null ? o.preserveValueImports : null,
+        title: "preserveValueImports removed",
+        reason: "`preserveValueImports` was folded into `verbatimModuleSyntax` and is removed in TypeScript 7.0.",
+        fix: 'Remove it and use `"verbatimModuleSyntax": true`.'
+      },
+      {
+        id: "keyof-strings-only",
+        key: "keyofStringsOnly",
+        test: (o) => o.keyofStringsOnly != null ? o.keyofStringsOnly : null,
+        title: "keyofStringsOnly removed",
+        reason: "`keyofStringsOnly` (a legacy TypeScript 2.9 flag) is removed in TypeScript 7.0.",
+        fix: "Remove `keyofStringsOnly`."
+      },
+      {
+        id: "no-implicit-use-strict",
+        key: "noImplicitUseStrict",
+        test: (o) => o.noImplicitUseStrict != null ? o.noImplicitUseStrict : null,
+        title: "noImplicitUseStrict removed",
+        reason: "`noImplicitUseStrict` is removed in TypeScript 7.0.",
+        fix: "Remove `noImplicitUseStrict`."
+      },
+      {
+        id: "no-strict-generic-checks",
+        key: "noStrictGenericChecks",
+        test: (o) => o.noStrictGenericChecks != null ? o.noStrictGenericChecks : null,
+        title: "noStrictGenericChecks removed",
+        reason: "`noStrictGenericChecks` is removed in TypeScript 7.0.",
+        fix: "Remove `noStrictGenericChecks` and fix any generic variance errors it was masking."
+      },
+      {
+        id: "charset",
+        key: "charset",
+        test: (o) => o.charset != null ? o.charset : null,
+        title: "charset removed",
+        reason: "`charset` has been a no-op since TypeScript 1.8 and is removed in TypeScript 7.0.",
+        fix: "Remove `charset` (source files are read as UTF-8)."
+      }
+    ];
+    var ADVISORY_RULES = [
+      {
+        id: "strict-default",
+        key: "strict",
+        applies: ({ options, optionsSet }) => !optionsSet.has("strict") || options.strict === false,
+        title: "strict is now on by default",
+        reason: "TypeScript 7.0 enables `strict` by default. Your tsconfig does not enable it, so the upgrade will turn on all strict-family checks at once \u2014 expect new type errors (nulls, implicit any, etc.).",
+        fix: 'Set `"strict": true` now and fix the errors incrementally before upgrading, rather than all at once on the jump to 7.0.'
+      },
+      {
+        id: "emit-decorator-metadata",
+        key: "emitDecoratorMetadata",
+        applies: ({ options }) => options.emitDecoratorMetadata === true,
+        title: "emitDecoratorMetadata support on tsgo is unconfirmed",
+        reason: "You rely on `emitDecoratorMetadata` (reflect-metadata DI \u2014 NestJS, TypeORM, Angular, class-transformer). The native Go compiler's design-time metadata emit is still unresolved upstream (typescript-go#741); do not assume runtime parity on 7.0.",
+        fix: "Verify your DI/ORM works against the native compiler before upgrading; keep `typescript` on 6.x for the metadata-emitting build until parity is confirmed.",
+        helpUri: DECORATORS_URI
+      },
+      {
+        id: "ignore-deprecations",
+        key: "ignoreDeprecations",
+        applies: ({ optionsSet }) => optionsSet.has("ignoreDeprecations"),
+        title: "ignoreDeprecations no longer rescues removed options",
+        reason: "`ignoreDeprecations` silenced these options in TypeScript 6.x. In 7.0 the options are *removed*, not deprecated, so the escape hatch stops working and any options it was covering become hard errors.",
+        fix: "Remove `ignoreDeprecations` and migrate the options it was suppressing (see the other tsconfig findings)."
+      }
+    ];
+    var DECORATOR_FRAMEWORKS = [
+      "@nestjs/core",
+      "@nestjs/common",
+      "typeorm",
+      "@mikro-orm/core",
+      "class-transformer",
+      "class-validator",
+      "reflect-metadata",
+      "@angular/core"
+    ];
+    function stripComments(text) {
+      let out = "";
+      let i = 0;
+      const n = text.length;
+      let inStr = false;
+      let quote = "";
+      let inLine = false;
+      let inBlock = false;
+      while (i < n) {
+        const c = text[i];
+        const next = i + 1 < n ? text[i + 1] : "";
+        if (inLine) {
+          if (c === "\n") {
+            inLine = false;
+            out += c;
+          }
+          i++;
+          continue;
+        }
+        if (inBlock) {
+          if (c === "*" && next === "/") {
+            inBlock = false;
+            i += 2;
+          } else {
+            if (c === "\n") out += c;
+            i++;
+          }
+          continue;
+        }
+        if (inStr) {
+          out += c;
+          if (c === "\\") {
+            out += next;
+            i += 2;
+            continue;
+          }
+          if (c === quote) inStr = false;
+          i++;
+          continue;
+        }
+        if (c === '"' || c === "'") {
+          inStr = true;
+          quote = c;
+          out += c;
+          i++;
+          continue;
+        }
+        if (c === "/" && next === "/") {
+          inLine = true;
+          i += 2;
+          continue;
+        }
+        if (c === "/" && next === "*") {
+          inBlock = true;
+          i += 2;
+          continue;
+        }
+        out += c;
+        i++;
+      }
+      return out;
+    }
+    function removeTrailingCommas(text) {
+      let out = "";
+      let i = 0;
+      const n = text.length;
+      let inStr = false;
+      let quote = "";
+      while (i < n) {
+        const c = text[i];
+        if (inStr) {
+          out += c;
+          if (c === "\\") {
+            out += i + 1 < n ? text[i + 1] : "";
+            i += 2;
+            continue;
+          }
+          if (c === quote) inStr = false;
+          i++;
+          continue;
+        }
+        if (c === '"' || c === "'") {
+          inStr = true;
+          quote = c;
+          out += c;
+          i++;
+          continue;
+        }
+        if (c === ",") {
+          let j = i + 1;
+          while (j < n && /\s/.test(text[j])) j++;
+          if (j < n && (text[j] === "}" || text[j] === "]")) {
+            i++;
+            continue;
+          }
+        }
+        out += c;
+        i++;
+      }
+      return out;
+    }
+    function parseJsonc(text) {
+      return JSON.parse(removeTrailingCommas(stripComments(text)));
+    }
+    function locateKey(raw, key) {
+      if (!raw || !key) return { line: 1, column: 1 };
+      const needle = '"' + key + '"';
+      const idx = raw.indexOf(needle);
+      if (idx === -1) return { line: 1, column: 1 };
+      let line = 1;
+      let last = -1;
+      for (let i = 0; i < idx; i++) {
+        if (raw[i] === "\n") {
+          line++;
+          last = i;
+        }
+      }
+      return { line, column: idx - last };
+    }
+    function findTsconfig(dir) {
+      const p = path2.join(dir, "tsconfig.json");
+      return fs2.existsSync(p) ? p : null;
+    }
+    function readTsconfig(tsconfigPath) {
+      const seen = /* @__PURE__ */ new Set();
+      const unresolvedExtends = [];
+      let leafRaw = "";
+      function load(p, depth) {
+        if (depth > 8 || seen.has(p)) return { options: {}, references: [] };
+        seen.add(p);
+        let text;
+        try {
+          text = fs2.readFileSync(p, "utf8");
+        } catch (e) {
+          throw Object.assign(new Error(`Could not read ${p}: ${e.message}`), { code: "EREADTSCONFIG" });
+        }
+        if (depth === 0) leafRaw = text;
+        let json;
+        try {
+          json = parseJsonc(text);
+        } catch (e) {
+          throw Object.assign(new Error(`Invalid JSON in ${p}: ${e.message}`), { code: "EBADTSCONFIG" });
+        }
+        let base = { options: {}, references: [] };
+        const ext = json.extends;
+        const extList = Array.isArray(ext) ? ext : ext != null ? [ext] : [];
+        for (const e of extList) {
+          if (typeof e === "string" && (e.startsWith("./") || e.startsWith("../") || e.startsWith("/"))) {
+            let resolved = path2.resolve(path2.dirname(p), e);
+            if (!/\.json$/i.test(resolved)) resolved += ".json";
+            if (fs2.existsSync(resolved)) {
+              const parent = load(resolved, depth + 1);
+              base = { options: Object.assign({}, base.options, parent.options), references: parent.references };
+            } else {
+              unresolvedExtends.push(e);
+            }
+          } else if (e != null) {
+            unresolvedExtends.push(String(e));
+          }
+        }
+        const options = Object.assign({}, base.options, json.compilerOptions || {});
+        const references = Array.isArray(json.references) ? json.references : base.references;
+        return { options, references };
+      }
+      try {
+        const { options, references } = load(tsconfigPath, 0);
+        return { path: tsconfigPath, raw: leafRaw, options, references, unresolvedExtends, parseError: null };
+      } catch (e) {
+        return {
+          path: tsconfigPath,
+          raw: leafRaw,
+          options: {},
+          references: [],
+          unresolvedExtends,
+          parseError: e.message
+        };
+      }
+    }
+    function evaluateTsconfig(parsed, ctx = {}) {
+      const ts7 = !!ctx.ts7;
+      const options = parsed.options || {};
+      const optionsSet = new Set(Object.keys(options));
+      const findings = [];
+      const advisories = [];
+      const raw = parsed.raw || "";
+      const rel = parsed.relPath || "tsconfig.json";
+      for (const rule of REMOVED_OPTIONS) {
+        const hit = rule.test(options);
+        if (hit === null || hit === void 0) continue;
+        const loc = locateKey(raw, rule.key);
+        findings.push({
+          category: "tsconfig",
+          id: rule.id,
+          option: rule.key,
+          value: hit,
+          title: rule.title,
+          reason: rule.reason,
+          fix: rule.fix,
+          severity: ts7 ? "conflict" : "warning",
+          file: rel,
+          line: loc.line,
+          column: loc.column,
+          helpUri: HELP_URI
+        });
+      }
+      if (Array.isArray(parsed.references) && parsed.references.some((r) => r && r.prepend)) {
+        const loc = locateKey(raw, "prepend");
+        findings.push({
+          category: "tsconfig",
+          id: "references-prepend",
+          option: "references[].prepend",
+          value: true,
+          title: "project-reference prepend removed",
+          reason: "`prepend` on project references (concatenated `outFile` output) is removed in TypeScript 7.0.",
+          fix: "Drop `prepend` and concatenate build output with a bundler if needed.",
+          severity: ts7 ? "conflict" : "warning",
+          file: rel,
+          line: loc.line,
+          column: loc.column,
+          helpUri: HELP_URI
+        });
+      }
+      const deps = ctx.deps || {};
+      for (const rule of ADVISORY_RULES) {
+        if (!rule.applies({ options, optionsSet, deps })) continue;
+        let reason = rule.reason;
+        if (rule.id === "emit-decorator-metadata") {
+          const present = DECORATOR_FRAMEWORKS.filter(
+            (f) => Object.prototype.hasOwnProperty.call(deps, f)
+          );
+          if (present.length) {
+            reason += ` Detected in your dependencies: ${present.join(", ")}.`;
+          }
+        }
+        const loc = locateKey(raw, rule.key);
+        advisories.push({
+          category: "risk",
+          id: rule.id,
+          option: rule.key,
+          title: rule.title,
+          reason,
+          fix: rule.fix,
+          severity: "advisory",
+          file: rel,
+          line: loc.line,
+          column: loc.column,
+          helpUri: rule.helpUri || HELP_URI
+        });
+      }
+      return { findings, advisories };
+    }
+    function analyzeTsconfigDir(dir, ctx = {}) {
+      const tsconfigPath = findTsconfig(dir);
+      if (!tsconfigPath) {
+        return { present: false, path: null, absPath: null, findings: [], advisories: [], parseError: null, unresolvedExtends: [] };
+      }
+      const parsed = readTsconfig(tsconfigPath);
+      const root = ctx.root || dir;
+      parsed.relPath = toPosix(path2.relative(root, tsconfigPath)) || "tsconfig.json";
+      if (parsed.parseError) {
+        return {
+          present: true,
+          path: parsed.relPath,
+          absPath: tsconfigPath,
+          findings: [],
+          advisories: [],
+          parseError: parsed.parseError,
+          unresolvedExtends: parsed.unresolvedExtends
+        };
+      }
+      const { findings, advisories } = evaluateTsconfig(parsed, ctx);
+      return {
+        present: true,
+        path: parsed.relPath,
+        absPath: tsconfigPath,
+        findings,
+        advisories,
+        parseError: null,
+        unresolvedExtends: parsed.unresolvedExtends
+      };
+    }
+    function toPosix(p) {
+      return p.split(path2.sep).join("/");
+    }
+    module2.exports = {
+      REMOVED_OPTIONS,
+      ADVISORY_RULES,
+      DECORATOR_FRAMEWORKS,
+      stripComments,
+      removeTrailingCommas,
+      parseJsonc,
+      locateKey,
+      findTsconfig,
+      readTsconfig,
+      evaluateTsconfig,
+      analyzeTsconfigDir,
+      HELP_URI,
+      DECORATORS_URI
+    };
+  }
+});
+
 // src/core.js
 var require_core = __commonJS({
   "src/core.js"(exports2, module2) {
@@ -2110,6 +2588,7 @@ var require_core = __commonJS({
     var path2 = require("node:path");
     var semver = require_semver2();
     var builtinDb = require_db();
+    var tsconfig = require_tsconfig();
     var DEP_FIELDS = [
       "dependencies",
       "devDependencies",
@@ -2233,7 +2712,7 @@ var require_core = __commonJS({
       }
       conflicts.sort((a, b) => a.pkg.localeCompare(b.pkg));
       ignored.sort((a, b) => a.pkg.localeCompare(b.pkg));
-      return {
+      const result = {
         ts7: tsInfo.ts7,
         typescript: {
           raw: tsInfo.raw,
@@ -2243,15 +2722,41 @@ var require_core = __commonJS({
         },
         conflicts,
         ignored,
-        name: pkg.name
+        name: pkg.name,
+        tsconfig: { present: false, path: null, absPath: null, findings: [], parseError: null, unresolvedExtends: [] },
+        risks: []
       };
+      return finalize(result);
+    }
+    function finalize(result) {
+      const tsFindings = result.tsconfig && result.tsconfig.findings || [];
+      const activeDep = result.ts7 ? result.conflicts.length : 0;
+      const activeTsconfig = tsFindings.filter((f) => f.severity === "conflict").length;
+      result.activeConflictCount = activeDep + activeTsconfig;
+      result.hasActiveConflict = result.activeConflictCount > 0;
+      result.warningCount = (result.ts7 ? 0 : result.conflicts.length) + tsFindings.filter((f) => f.severity === "warning").length;
+      result.advisoryCount = (result.risks || []).length;
+      return result;
     }
     function analyzeDir(dir, opts = {}) {
       const { pkg, pkgPath } = readPackageJson(dir);
       const result = analyze(pkg, opts);
       result.pkgPath = pkgPath;
       result.dir = dir;
-      return result;
+      if (opts.tsconfig !== false) {
+        const deps = mergeDeps(pkg);
+        const ts = tsconfig.analyzeTsconfigDir(dir, { ts7: result.ts7, deps, root: dir });
+        result.tsconfig = {
+          present: ts.present,
+          path: ts.path,
+          absPath: ts.absPath,
+          findings: ts.findings,
+          parseError: ts.parseError,
+          unresolvedExtends: ts.unresolvedExtends
+        };
+        result.risks = ts.advisories || [];
+      }
+      return finalize(result);
     }
     var DEFAULT_SKIP_DIRS = /* @__PURE__ */ new Set([
       "node_modules",
@@ -2301,19 +2806,22 @@ var require_core = __commonJS({
           results.push({ dir, error: e.message, conflicts: [], ignored: [], ts7: false });
         }
       }
+      const tsFindings = (r) => r.tsconfig && r.tsconfig.findings || [];
       const summary = {
         packagesScanned: results.length,
-        packagesWithConflicts: results.filter((r) => r.conflicts && r.conflicts.length > 0).length,
-        activeConflictPackages: results.filter(
-          (r) => r.ts7 && r.conflicts && r.conflicts.length > 0
+        packagesWithConflicts: results.filter(
+          (r) => r.conflicts && r.conflicts.length > 0 || tsFindings(r).length > 0
         ).length,
+        activeConflictPackages: results.filter((r) => r.hasActiveConflict).length,
         totalConflicts: results.reduce((n, r) => n + (r.conflicts ? r.conflicts.length : 0), 0),
+        totalTsconfigFindings: results.reduce((n, r) => n + tsFindings(r).length, 0),
+        totalAdvisories: results.reduce((n, r) => n + (r.risks && r.risks.length || 0), 0),
         errors: results.filter((r) => r.error).length
       };
       return { results, summary };
     }
     function exitCodeFor(result, mode) {
-      if (mode === "fail" && result.ts7 && result.conflicts.length > 0) return 1;
+      if (mode === "fail" && result.hasActiveConflict) return 1;
       return 0;
     }
     function exitCodeForMany(agg, mode) {
@@ -2323,9 +2831,11 @@ var require_core = __commonJS({
     module2.exports = {
       db: builtinDb,
       builtinDb,
+      tsconfig,
       analyze,
       analyzeDir,
       analyzeMany,
+      finalize,
       analyzeTypescriptVersion,
       getTypescriptSpec,
       readOverrideTypescript,
@@ -2344,10 +2854,17 @@ var require_core = __commonJS({
 var require_report = __commonJS({
   "src/report.js"(exports2, module2) {
     "use strict";
+    var TITLE = "=== TypeScript 7.0 / tsgo Readiness ===";
+    function statusOf(result) {
+      if (result.hasActiveConflict) return "conflict";
+      if (result.warningCount > 0) return "warning";
+      if (result.advisoryCount > 0) return "advisory";
+      return "clean";
+    }
     function humanReport2(result, opts = {}) {
       const c = makeColors(!!opts.color);
       const lines = [];
-      lines.push(c.bold("=== TypeScript 7.0 Toolchain Conflicts ==="));
+      lines.push(c.bold(TITLE));
       const tsRaw = result.typescript.raw;
       const srcNote = result.typescript.source && result.typescript.source !== "dependencies" ? c.dim(` (via ${result.typescript.source})`) : "";
       if (tsRaw == null) {
@@ -2357,40 +2874,76 @@ var require_report = __commonJS({
       } else {
         lines.push("  " + c.green(`typescript ${tsRaw} \u2192 TypeScript 6.x (pre-7.0)`) + srcNote);
       }
-      if (result.conflicts.length === 0) {
+      const tsFindings = result.tsconfig && result.tsconfig.findings || [];
+      const risks = result.risks || [];
+      const nothing = result.conflicts.length === 0 && tsFindings.length === 0 && risks.length === 0;
+      if (result.tsconfig && result.tsconfig.parseError) {
+        lines.push("  " + c.yellow(`tsconfig.json: could not parse (${result.tsconfig.parseError})`));
+      }
+      if (nothing) {
         lines.push("");
-        lines.push(c.green("  \u2713 No known TypeScript 7.0 Compiler API conflicts found."));
+        lines.push(c.green("  \u2713 No TypeScript 7.0 / tsgo readiness issues found."));
         appendIgnored(lines, result, c);
         return lines;
       }
-      lines.push("");
-      if (result.ts7) {
-        for (const conf of result.conflicts) {
-          lines.push("  " + c.red(`CONFLICT: ${conf.pkg} \u2014 ${conf.reason}`));
-          lines.push("    " + c.yellow(`Fix: ${conf.fix}`));
-        }
+      if (result.conflicts.length > 0) {
         lines.push("");
+        lines.push(c.bold("  [dependencies]"));
+        if (result.ts7) {
+          for (const conf of result.conflicts) {
+            lines.push("  " + c.red(`CONFLICT: ${conf.pkg} \u2014 ${conf.reason}`));
+            lines.push("    " + c.yellow(`Fix: ${conf.fix}`));
+          }
+        } else {
+          for (const conf of result.conflicts) {
+            lines.push(
+              "  " + c.yellow(
+                `WARNING: ${conf.pkg} will break when typescript is upgraded to ^7 \u2014 plan migration now.`
+              )
+            );
+            lines.push("    " + c.dim(`Reason: ${conf.reason}`));
+            lines.push("    " + c.dim(`Fix: ${conf.fix}`));
+          }
+        }
+      }
+      if (tsFindings.length > 0) {
+        lines.push("");
+        lines.push(c.bold("  [tsconfig.json]"));
+        for (const f of tsFindings) {
+          const loc = c.dim(` (${f.file}:${f.line})`);
+          if (f.severity === "conflict") {
+            lines.push("  " + c.red(`CONFLICT: ${f.option} \u2014 ${f.title}`) + loc);
+          } else {
+            lines.push("  " + c.yellow(`WARNING: ${f.option} \u2014 ${f.title} (breaks on upgrade to ^7)`) + loc);
+          }
+          lines.push("    " + c.dim(`Reason: ${f.reason}`));
+          lines.push("    " + c.yellow(`Fix: ${f.fix}`));
+        }
+      }
+      if (risks.length > 0) {
+        lines.push("");
+        lines.push(c.bold("  [advisories]") + c.dim("  (behavioural risks \u2014 do not fail the build)"));
+        for (const r of risks) {
+          const loc = r.file ? c.dim(` (${r.file}:${r.line})`) : "";
+          lines.push("  " + c.cyan(`ADVISORY: ${r.title}`) + loc);
+          lines.push("    " + c.dim(`${r.reason}`));
+          lines.push("    " + c.dim(`Fix: ${r.fix}`));
+        }
+      }
+      lines.push("");
+      const parts = [];
+      if (result.activeConflictCount > 0) parts.push(`${result.activeConflictCount} conflict(s)`);
+      if (result.warningCount > 0) parts.push(`${result.warningCount} warning(s)`);
+      if (result.advisoryCount > 0) parts.push(`${result.advisoryCount} advisory(ies)`);
+      const summary = `  ${parts.join(" \xB7 ")}`;
+      if (result.hasActiveConflict) {
+        lines.push(c.red(summary + " \u2014 type-checking/builds will break under TypeScript 7.0."));
+      } else if (result.warningCount > 0) {
         lines.push(
-          c.red(
-            `  ${result.conflicts.length} conflict(s) will break type-checking under TypeScript 7.0.`
-          )
+          c.yellow(summary + " \u2014 you are on TypeScript 6.x today, so nothing is broken yet.")
         );
       } else {
-        for (const conf of result.conflicts) {
-          lines.push(
-            "  " + c.yellow(
-              `WARNING: ${conf.pkg} will break when typescript is upgraded to ^7 \u2014 plan migration now.`
-            )
-          );
-          lines.push("    " + c.dim(`Reason: ${conf.reason}`));
-          lines.push("    " + c.dim(`Fix: ${conf.fix}`));
-        }
-        lines.push("");
-        lines.push(
-          c.yellow(
-            `  ${result.conflicts.length} package(s) are TypeScript-7-incompatible. You are on TypeScript 6.x today, so nothing is broken yet.`
-          )
-        );
+        lines.push(c.cyan(summary + " \u2014 no build-breaking issues; review advisories before upgrading."));
       }
       appendIgnored(lines, result, c);
       return lines;
@@ -2408,7 +2961,7 @@ var require_report = __commonJS({
       const path2 = require("node:path");
       const root = opts.root || process.cwd();
       const lines = [];
-      lines.push(c.bold("=== TypeScript 7.0 Toolchain Conflicts (recursive) ==="));
+      lines.push(c.bold("=== TypeScript 7.0 / tsgo Readiness (recursive) ==="));
       lines.push(c.dim(`  scanned ${agg.summary.packagesScanned} package(s) under ${root}`));
       lines.push("");
       for (const r of agg.results) {
@@ -2417,45 +2970,85 @@ var require_report = __commonJS({
           lines.push("  " + c.red(`\u2717 ${rel}: ${r.error}`));
           continue;
         }
-        const active = r.ts7 && r.conflicts.length > 0;
-        const willBreak = !r.ts7 && r.conflicts.length > 0;
-        if (active) {
+        const tsFindings = r.tsconfig && r.tsconfig.findings || [];
+        const risks = r.risks || [];
+        if (r.hasActiveConflict) {
           lines.push("  " + c.red(`\u25CF ${rel}`) + c.dim(`  (typescript ${r.typescript.raw})`));
-          for (const conf of r.conflicts) {
-            lines.push("      " + c.red(`CONFLICT: ${conf.pkg} \u2014 ${conf.reason}`));
-            lines.push("        " + c.yellow(`Fix: ${conf.fix}`));
+          if (r.ts7) {
+            for (const conf of r.conflicts) {
+              lines.push("      " + c.red(`CONFLICT: ${conf.pkg} \u2014 ${conf.reason}`));
+              lines.push("        " + c.yellow(`Fix: ${conf.fix}`));
+            }
           }
-        } else if (willBreak) {
+          for (const f of tsFindings.filter((x) => x.severity === "conflict")) {
+            lines.push("      " + c.red(`CONFLICT: ${f.option} \u2014 ${f.title}`) + c.dim(` (${f.file}:${f.line})`));
+            lines.push("        " + c.yellow(`Fix: ${f.fix}`));
+          }
+        } else if (r.warningCount > 0) {
           lines.push("  " + c.yellow(`\u25CB ${rel}`) + c.dim(`  (typescript ${r.typescript.raw || "n/a"})`));
           for (const conf of r.conflicts) {
             lines.push(
               "      " + c.yellow(`WARNING: ${conf.pkg} will break when typescript is upgraded to ^7.`)
             );
           }
+          for (const f of tsFindings.filter((x) => x.severity === "warning")) {
+            lines.push("      " + c.yellow(`WARNING: ${f.option} \u2014 ${f.title} (breaks on upgrade).`));
+          }
+        } else if (risks.length > 0) {
+          lines.push("  " + c.cyan(`\u25CD ${rel}`) + c.dim(`  (${risks.length} advisory(ies))`));
         } else {
           lines.push("  " + c.green(`\u2713 ${rel}`) + c.dim("  (clean)"));
         }
       }
       lines.push("");
       const s = agg.summary;
-      const summaryLine = `  ${s.packagesScanned} scanned \xB7 ${s.activeConflictPackages} with active conflicts \xB7 ${s.packagesWithConflicts - s.activeConflictPackages} with warnings \xB7 ${s.errors} error(s)`;
+      const summaryLine = `  ${s.packagesScanned} scanned \xB7 ${s.activeConflictPackages} with active conflicts \xB7 ${s.packagesWithConflicts - s.activeConflictPackages} with warnings \xB7 ${s.totalAdvisories} advisory(ies) \xB7 ${s.errors} error(s)`;
       lines.push(s.activeConflictPackages > 0 ? c.red(summaryLine) : c.green(summaryLine));
       return lines;
     }
     function jsonReport2(result) {
-      const status = result.conflicts.length === 0 ? "clean" : result.ts7 ? "conflict" : "warning";
+      const tsFindings = result.tsconfig && result.tsconfig.findings || [];
+      const risks = result.risks || [];
       return {
         tool: "ts7-compat-guard",
         ts7: result.ts7,
         typescript: result.typescript,
-        status,
-        conflictCount: result.conflicts.length,
+        status: statusOf(result),
+        conflictCount: result.activeConflictCount,
+        warningCount: result.warningCount,
+        advisoryCount: result.advisoryCount,
         conflicts: result.conflicts.map((conf) => ({
           pkg: conf.pkg,
           version: conf.version,
           reason: conf.reason,
           fix: conf.fix,
           severity: result.ts7 ? "conflict" : "warning"
+        })),
+        tsconfig: {
+          present: !!(result.tsconfig && result.tsconfig.present),
+          path: result.tsconfig ? result.tsconfig.path : null,
+          parseError: result.tsconfig ? result.tsconfig.parseError : null,
+          findings: tsFindings.map((f) => ({
+            id: f.id,
+            option: f.option,
+            value: f.value,
+            title: f.title,
+            reason: f.reason,
+            fix: f.fix,
+            severity: f.severity,
+            file: f.file,
+            line: f.line,
+            column: f.column
+          }))
+        },
+        advisories: risks.map((r) => ({
+          id: r.id,
+          option: r.option,
+          title: r.title,
+          reason: r.reason,
+          fix: r.fix,
+          file: r.file,
+          line: r.line
         })),
         ignored: (result.ignored || []).map((i) => i.pkg)
       };
@@ -2481,7 +3074,7 @@ var require_report = __commonJS({
     function makeColors(enabled) {
       if (!enabled) {
         const id = (s) => s;
-        return { bold: id, dim: id, red: id, green: id, yellow: id };
+        return { bold: id, dim: id, red: id, green: id, yellow: id, cyan: id };
       }
       const wrap = (open, close) => (s) => `[${open}m${s}[${close}m`;
       return {
@@ -2489,10 +3082,11 @@ var require_report = __commonJS({
         dim: wrap(2, 22),
         red: wrap(31, 39),
         green: wrap(32, 39),
-        yellow: wrap(33, 39)
+        yellow: wrap(33, 39),
+        cyan: wrap(36, 39)
       };
     }
-    module2.exports = { humanReport: humanReport2, humanReportMany: humanReportMany2, jsonReport: jsonReport2, jsonReportMany: jsonReportMany2 };
+    module2.exports = { humanReport: humanReport2, humanReportMany: humanReportMany2, jsonReport: jsonReport2, jsonReportMany: jsonReportMany2, statusOf };
   }
 });
 
@@ -2503,53 +3097,94 @@ var require_sarif = __commonJS({
     var path2 = require("node:path");
     var SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json";
     var VERSION = "2.1.0";
-    function ruleIdFor(pkg) {
-      return `ts7-compat/${pkg}`;
-    }
+    var DEP_HELP = "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/";
     function toPosix(p) {
       return p.split(path2.sep).join("/");
+    }
+    function sanitize(s) {
+      return String(s).replace(/[^a-zA-Z0-9]/g, "_");
     }
     function buildSarif2(results, opts = {}) {
       const root = opts.root || process.cwd();
       const version = opts.version || "0.0.0";
       const rulesById = /* @__PURE__ */ new Map();
       const sarifResults = [];
+      const ensureRule = (rule) => {
+        if (!rulesById.has(rule.id)) rulesById.set(rule.id, rule);
+      };
+      const location = (uri, line, column) => ({
+        physicalLocation: {
+          artifactLocation: { uri, uriBaseId: "%SRCROOT%" },
+          region: { startLine: line || 1, startColumn: column || 1 }
+        }
+      });
       for (const r of results) {
-        if (!r || !r.conflicts) continue;
+        if (!r) continue;
         const pkgPath = r.pkgPath || path2.join(r.dir || root, "package.json");
-        const uri = toPosix(path2.relative(root, pkgPath)) || "package.json";
-        for (const conf of r.conflicts) {
-          const ruleId = ruleIdFor(conf.pkg);
+        const pkgUri = toPosix(path2.relative(root, pkgPath)) || "package.json";
+        for (const conf of r.conflicts || []) {
+          const ruleId = `ts7-compat/dep/${conf.pkg}`;
           const level = r.ts7 ? "error" : "warning";
-          if (!rulesById.has(ruleId)) {
-            rulesById.set(ruleId, {
-              id: ruleId,
-              name: `TS7Incompatible_${conf.pkg.replace(/[^a-zA-Z0-9]/g, "_")}`,
-              shortDescription: { text: `${conf.pkg} is incompatible with TypeScript 7.0` },
-              fullDescription: { text: conf.reason },
-              helpUri: "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/",
-              help: { text: `Fix: ${conf.fix}` },
-              defaultConfiguration: { level: "error" },
-              properties: { tags: ["typescript", "typescript-7", "compatibility"] }
-            });
-          }
-          const messageText = r.ts7 ? `CONFLICT: ${conf.pkg} \u2014 ${conf.reason} Fix: ${conf.fix}` : `${conf.pkg} will break when typescript is upgraded to ^7 \u2014 plan migration now. Fix: ${conf.fix}`;
+          ensureRule({
+            id: ruleId,
+            name: `TS7Dep_${sanitize(conf.pkg)}`,
+            shortDescription: { text: `${conf.pkg} is incompatible with TypeScript 7.0` },
+            fullDescription: { text: conf.reason },
+            helpUri: DEP_HELP,
+            help: { text: `Fix: ${conf.fix}` },
+            defaultConfiguration: { level: "error" },
+            properties: { tags: ["typescript", "typescript-7", "tsgo", "dependency"] }
+          });
           sarifResults.push({
             ruleId,
             level,
-            message: { text: messageText },
-            locations: [
-              {
-                physicalLocation: {
-                  artifactLocation: { uri, uriBaseId: "%SRCROOT%" },
-                  region: { startLine: 1, startColumn: 1 }
-                }
-              }
-            ],
-            partialFingerprints: {
-              // stable across runs so GitHub dedupes/tracks the alert
-              ts7CompatGuard: `${uri}::${conf.pkg}`
-            }
+            message: {
+              text: r.ts7 ? `CONFLICT: ${conf.pkg} \u2014 ${conf.reason} Fix: ${conf.fix}` : `${conf.pkg} will break when typescript is upgraded to ^7 \u2014 plan migration now. Fix: ${conf.fix}`
+            },
+            locations: [location(pkgUri, 1, 1)],
+            partialFingerprints: { ts7CompatGuard: `${pkgUri}::dep::${conf.pkg}` }
+          });
+        }
+        const tsFindings = r.tsconfig && r.tsconfig.findings || [];
+        const tsUri = r.tsconfig && r.tsconfig.absPath ? toPosix(path2.relative(root, r.tsconfig.absPath)) : toPosix(path2.relative(root, path2.join(r.dir || root, "tsconfig.json")));
+        for (const f of tsFindings) {
+          const ruleId = `ts7-compat/tsconfig/${f.id}`;
+          ensureRule({
+            id: ruleId,
+            name: `TS7Tsconfig_${sanitize(f.id)}`,
+            shortDescription: { text: f.title },
+            fullDescription: { text: f.reason },
+            helpUri: f.helpUri || DEP_HELP,
+            help: { text: `Fix: ${f.fix}` },
+            defaultConfiguration: { level: "error" },
+            properties: { tags: ["typescript", "typescript-7", "tsgo", "tsconfig"] }
+          });
+          sarifResults.push({
+            ruleId,
+            level: f.severity === "conflict" ? "error" : "warning",
+            message: { text: `${f.option}: ${f.title}. ${f.reason} Fix: ${f.fix}` },
+            locations: [location(tsUri, f.line, f.column)],
+            partialFingerprints: { ts7CompatGuard: `${tsUri}::tsconfig::${f.id}` }
+          });
+        }
+        for (const a of r.risks || []) {
+          const ruleId = `ts7-compat/risk/${a.id}`;
+          ensureRule({
+            id: ruleId,
+            name: `TS7Risk_${sanitize(a.id)}`,
+            shortDescription: { text: a.title },
+            fullDescription: { text: a.reason },
+            helpUri: a.helpUri || DEP_HELP,
+            help: { text: `Fix: ${a.fix}` },
+            defaultConfiguration: { level: "note" },
+            properties: { tags: ["typescript", "typescript-7", "tsgo", "advisory"] }
+          });
+          sarifResults.push({
+            ruleId,
+            level: "note",
+            message: { text: `${a.title}. ${a.reason} Fix: ${a.fix}` },
+            locations: [location(tsUri, a.line, a.column)],
+            partialFingerprints: { ts7CompatGuard: `${tsUri}::risk::${a.id}` }
           });
         }
       }
@@ -2583,8 +3218,8 @@ var require_package = __commonJS({
   "package.json"(exports2, module2) {
     module2.exports = {
       name: "ts7-compat-guard",
-      version: "1.0.0",
-      description: "Detect TypeScript 7.0 Compiler API incompatibilities in package.json before they break framework type-checking (Vue/Volar, Astro, Svelte, MDX, Angular, ts-node, ts-morph, typescript-eslint, and more). GitHub Action + npx CLI.",
+      version: "2.0.0",
+      description: "TypeScript 7.0 / tsgo readiness scanner \u2014 flags Compiler-API dependencies, removed tsconfig.json options (with exact line numbers), and behavioural advisories before they break your build. Manifest/config only, no source-file scanning, no false positives. npx CLI + GitHub Action + SARIF.",
       bin: {
         "ts7-compat-guard": "src/cli.js"
       },
@@ -2593,6 +3228,7 @@ var require_package = __commonJS({
         ".": "./src/core.js",
         "./report": "./src/report.js",
         "./sarif": "./src/sarif.js",
+        "./tsconfig": "./src/tsconfig.js",
         "./db.json": "./src/db.json",
         "./package.json": "./package.json"
       },
@@ -2614,17 +3250,22 @@ var require_package = __commonJS({
       keywords: [
         "typescript",
         "typescript-7",
+        "tsgo",
+        "typescript-go",
+        "corsa",
+        "readiness",
+        "tsconfig",
         "compiler-api",
         "compatibility",
         "migration",
+        "decorators",
+        "emitdecoratormetadata",
         "vue",
         "volar",
         "astro",
         "svelte",
-        "mdx",
         "angular",
         "ts-morph",
-        "ts-node",
         "typescript-eslint",
         "github-action",
         "ci",
@@ -2713,6 +3354,21 @@ function annotateConflicts(result) {
       );
     }
   }
+  const tsFindings = result.tsconfig && result.tsconfig.findings || [];
+  const tsFile = result.tsconfig && result.tsconfig.absPath ? path.relative(process.cwd(), result.tsconfig.absPath).split(path.sep).join("/") : result.tsconfig && result.tsconfig.path;
+  for (const f of tsFindings) {
+    const loc = tsFile ? `file=${tsFile},line=${f.line},col=${f.column}` : "";
+    const cmd = f.severity === "conflict" ? "error" : "warning";
+    const prefix = f.severity === "conflict" ? "CONFLICT" : "WARNING";
+    emit(
+      loc ? `${cmd} ${loc}` : cmd,
+      `${prefix}: tsconfig ${f.option} \u2014 ${f.reason} Fix: ${f.fix}`
+    );
+  }
+  for (const a of result.risks || []) {
+    const loc = tsFile ? `file=${tsFile},line=${a.line},col=${a.column}` : "";
+    emit(loc ? `notice ${loc}` : "notice", `ADVISORY: ${a.title} \u2014 ${a.reason} Fix: ${a.fix}`);
+  }
 }
 function main() {
   const dirInput = getInput("package-dir", ".");
@@ -2758,14 +3414,17 @@ function main() {
     }
     if (sarifFile) writeSarif(agg.results, resolvedDir, version, sarifFile);
     const json2 = jsonReportMany(agg, { root: resolvedDir });
+    const activeCount = agg.results.reduce((n, r) => n + (r.activeConflictCount || 0), 0);
     setOutput("ts7", String(agg.results.some((r) => r.ts7)));
-    setOutput("conflict-count", String(agg.summary.totalConflicts));
-    setOutput("status", agg.summary.activeConflictPackages > 0 ? "conflict" : agg.summary.packagesWithConflicts > 0 ? "warning" : "clean");
+    setOutput("conflict-count", String(activeCount));
+    setOutput("tsconfig-count", String(agg.summary.totalTsconfigFindings));
+    setOutput("advisory-count", String(agg.summary.totalAdvisories));
+    setOutput("status", agg.summary.activeConflictPackages > 0 ? "conflict" : agg.summary.packagesWithConflicts > 0 ? "warning" : agg.summary.totalAdvisories > 0 ? "advisory" : "clean");
     setOutput("json", JSON.stringify(json2));
     appendSummary(
       `### ts7-compat-guard
 
-Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeConflictPackages}** with active conflicts, **${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings.`
+Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeConflictPackages}** with active conflicts, **${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings, **${agg.summary.totalAdvisories}** advisory(ies).`
     );
     if (effectiveMode === "fail" && agg.summary.activeConflictPackages > 0) {
       emit("error", `ts7-compat-guard failed: ${agg.summary.activeConflictPackages} package(s) have active TypeScript 7.0 conflicts.`);
@@ -2785,20 +3444,24 @@ Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeCon
   }
   process.stdout.write(humanReport(result, { color: false }).join("\n") + "\n");
   const json = jsonReport(result);
+  const tsCount = result.tsconfig && result.tsconfig.findings.length || 0;
   setOutput("ts7", String(result.ts7));
-  setOutput("conflict-count", String(result.conflicts.length));
+  setOutput("conflict-count", String(result.activeConflictCount));
+  setOutput("tsconfig-count", String(tsCount));
+  setOutput("advisory-count", String(result.advisoryCount));
   setOutput("status", json.status);
   setOutput("json", JSON.stringify(json));
-  if (result.conflicts.length > 0) annotateConflicts(result);
-  else emit("notice", "ts7-compat-guard: no TypeScript 7.0 Compiler API conflicts found.");
+  const anyFinding = result.conflicts.length > 0 || tsCount > 0 || result.advisoryCount > 0;
+  if (anyFinding) annotateConflicts(result);
+  else emit("notice", "ts7-compat-guard: no TypeScript 7.0 / tsgo readiness issues found.");
   if (sarifFile) writeSarif([result], resolvedDir, version, sarifFile);
   appendSummary(
     `### ts7-compat-guard
 
-\`typescript\` ${result.typescript.raw || "n/a"} \u2192 ${result.ts7 ? "TypeScript 7.0 detected" : "TypeScript 6.x"} \xB7 **${result.conflicts.length}** conflict(s) (status: ${json.status}).`
+\`typescript\` ${result.typescript.raw || "n/a"} \u2192 ${result.ts7 ? "TypeScript 7.0 detected" : "TypeScript 6.x"} \xB7 **${result.activeConflictCount}** conflict(s), **${result.warningCount}** warning(s), **${result.advisoryCount}** advisory(ies) (status: ${json.status}).`
   );
-  if (effectiveMode === "fail" && result.ts7 && result.conflicts.length > 0) {
-    emit("error", `ts7-compat-guard failed: ${result.conflicts.length} TypeScript 7.0 conflict(s) detected.`);
+  if (effectiveMode === "fail" && result.hasActiveConflict) {
+    emit("error", `ts7-compat-guard failed: ${result.activeConflictCount} build-breaking TypeScript 7.0 conflict(s) detected.`);
     process.exitCode = 1;
   } else {
     process.exitCode = 0;

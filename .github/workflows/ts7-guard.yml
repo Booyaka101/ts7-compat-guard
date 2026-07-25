@@ -1,9 +1,9 @@
 # Example consumer workflow — copy into any repo to gate PRs on
-# TypeScript 7.0 Compiler API compatibility.
+# TypeScript 7.0 / tsgo readiness (deps + tsconfig).
 #
 # NOTE: this file lives here as documentation. In a consumer repo, reference the
-# published action instead of "./":  uses: Booyaka101/ts7-compat-guard@v1
-name: TS7 Compatibility Guard
+# published action instead of "./":  uses: Booyaka101/ts7-compat-guard@v2
+name: TS7 / tsgo Readiness
 on:
   pull_request:
   push:
@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Basic gate: fail the build on an active TypeScript 7.0 conflict.
-      - uses: ./                      # consumers: Booyaka101/ts7-compat-guard@v1
+      - uses: ./                      # consumers: Booyaka101/ts7-compat-guard@v2
         with:
           package-dir: .
           mode: fail
@@ -27,7 +27,7 @@ jobs:
           # ignore: 'ts-node'        # comma-separated packages to skip
 
       # Optional: also surface findings in the Security tab via code scanning.
-      - uses: ./                      # consumers: Booyaka101/ts7-compat-guard@v1
+      - uses: ./                      # consumers: Booyaka101/ts7-compat-guard@v2
         if: always()
         with:
           package-dir: .

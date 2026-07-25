@@ -1,7 +1,7 @@
 {
   "name": "ts7-compat-guard",
-  "version": "1.0.0",
-  "description": "Detect TypeScript 7.0 Compiler API incompatibilities in package.json before they break framework type-checking (Vue/Volar, Astro, Svelte, MDX, Angular, ts-node, ts-morph, typescript-eslint, and more). GitHub Action + npx CLI.",
+  "version": "2.0.0",
+  "description": "TypeScript 7.0 / tsgo readiness scanner — flags Compiler-API dependencies, removed tsconfig.json options (with exact line numbers), and behavioural advisories before they break your build. Manifest/config only, no source-file scanning, no false positives. npx CLI + GitHub Action + SARIF.",
   "bin": {
     "ts7-compat-guard": "src/cli.js"
   },
@@ -10,6 +10,7 @@
     ".": "./src/core.js",
     "./report": "./src/report.js",
     "./sarif": "./src/sarif.js",
+    "./tsconfig": "./src/tsconfig.js",
     "./db.json": "./src/db.json",
     "./package.json": "./package.json"
   },
@@ -31,17 +32,22 @@
   "keywords": [
     "typescript",
     "typescript-7",
+    "tsgo",
+    "typescript-go",
+    "corsa",
+    "readiness",
+    "tsconfig",
     "compiler-api",
     "compatibility",
     "migration",
+    "decorators",
+    "emitdecoratormetadata",
     "vue",
     "volar",
     "astro",
     "svelte",
-    "mdx",
     "angular",
     "ts-morph",
-    "ts-node",
     "typescript-eslint",
     "github-action",
     "ci",
