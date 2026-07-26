@@ -1,10 +1,8 @@
 name: ts7-compat-guard
 description: >-
-  TypeScript 7.0 / tsgo readiness gate — detects Compiler-API dependencies,
-  removed tsconfig.json options (with exact line numbers), and behavioural
-  advisories before they break your build. Manifest/config only, no false
-  positives. CLI + SARIF for code scanning.
-author: ts7-compat-guard
+  TypeScript 7.0 / tsgo readiness gate — flags Compiler-API deps and removed
+  tsconfig options before they break your build.
+author: ts7-compat-guard contributors
 branding:
   icon: shield
   color: blue

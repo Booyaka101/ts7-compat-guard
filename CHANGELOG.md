@@ -4,6 +4,15 @@ All notable changes to `ts7-compat-guard` are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-07-26
+
+### Changed
+- `action.yml`: shortened `description` to 121 characters and set `author` to
+  `ts7-compat-guard contributors` (matching `package.json`). GitHub Marketplace
+  rejects action descriptions of 125 characters or more, which blocked listing.
+  No behavioural change — inputs, outputs and the bundled `dist/action.js` are
+  identical to 2.0.0.
+
 ## [2.0.0] - 2026-07-25
 
 Repositioned from a package.json-only conflict linter into a full **TypeScript
@@ -73,5 +82,6 @@ Initial release.
 - 84 tests covering core, report, SARIF, CLI (in-process + spawned), the Action,
   and the bundled `dist`.
 
+[2.0.1]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v2.0.1
 [2.0.0]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v2.0.0
 [1.0.0]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v1.0.0

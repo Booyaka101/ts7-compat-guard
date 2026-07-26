@@ -3218,7 +3218,7 @@ var require_package = __commonJS({
   "package.json"(exports2, module2) {
     module2.exports = {
       name: "ts7-compat-guard",
-      version: "2.0.0",
+      version: "2.0.1",
       description: "TypeScript 7.0 / tsgo readiness scanner \u2014 flags Compiler-API dependencies, removed tsconfig.json options (with exact line numbers), and behavioural advisories before they break your build. Manifest/config only, no source-file scanning, no false positives. npx CLI + GitHub Action + SARIF.",
       bin: {
         "ts7-compat-guard": "src/cli.js"
