@@ -212,6 +212,16 @@ const ADVISORY_RULES = [
     helpUri: DECORATORS_URI,
   },
   {
+    id: 'implicit-types-inclusion',
+    key: 'types',
+    applies: ({ optionsSet, deps }) =>
+      !optionsSet.has('types') && Object.keys(deps || {}).some((d) => d.startsWith('@types/')),
+    title: 'no explicit "types" — @types packages may not be included on 7.0',
+    reason:
+      'You depend on @types/* packages but your tsconfig has no `types` field, so inclusion relies on TypeScript scanning node_modules/@types automatically. On the native compiler that did not happen in practice: a project with @types/node and no `types` field failed to build with TS2591 "Cannot find name \'process\'" and TS2584 "Cannot find name \'console\'" — tsgo\'s own error text tells you to add \'node\' to the types field.',
+    fix: 'Add an explicit `"types": ["node", …]` listing the @types packages this project actually needs. It is a no-op on TypeScript 5/6 — it pins what was already being inferred — and it unblocks the 7.0 upgrade.',
+  },
+  {
     id: 'ignore-deprecations',
     key: 'ignoreDeprecations',
     applies: ({ optionsSet }) => optionsSet.has('ignoreDeprecations'),
