@@ -3306,6 +3306,9 @@ var require_package = __commonJS({
       homepage: "https://github.com/Booyaka101/ts7-compat-guard#readme",
       bugs: {
         url: "https://github.com/Booyaka101/ts7-compat-guard/issues"
+      },
+      allowScripts: {
+        "esbuild@0.28.1": true
       }
     };
   }
