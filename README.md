@@ -140,7 +140,7 @@ jobs:
   ts7-compat:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: Booyaka101/ts7-compat-guard@v2
         with:
           package-dir: .     # default: .
