@@ -2101,6 +2101,10 @@ var require_db = __commonJS({
       tsd: {
         reason: "Runs type assertions by driving the TypeScript Compiler API",
         fix: "Pin typescript to ^6.x"
+      },
+      tsup: {
+        reason: 'Generates .d.ts through the TypeScript Compiler API; its declaration step crashes on 7.0 with "Cannot read properties of undefined (reading useCaseSensitiveFileNames)"',
+        fix: "Build with `--dts false` and emit declarations via tsc, or pin typescript to ^6.x until tsup supports the native compiler"
       }
     };
   }
@@ -3230,7 +3234,7 @@ var require_package = __commonJS({
   "package.json"(exports2, module2) {
     module2.exports = {
       name: "ts7-compat-guard",
-      version: "2.1.0",
+      version: "2.2.0",
       description: "TypeScript 7.0 / tsgo readiness scanner \u2014 flags Compiler-API dependencies, removed tsconfig.json options (with exact line numbers), and behavioural advisories before they break your build. Manifest/config only, no source-file scanning, no false positives. npx CLI + GitHub Action + SARIF.",
       bin: {
         "ts7-compat-guard": "src/cli.js"

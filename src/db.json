@@ -94,5 +94,9 @@
   "tsd": {
     "reason": "Runs type assertions by driving the TypeScript Compiler API",
     "fix": "Pin typescript to ^6.x"
+  },
+  "tsup": {
+    "reason": "Generates .d.ts through the TypeScript Compiler API; its declaration step crashes on 7.0 with \"Cannot read properties of undefined (reading useCaseSensitiveFileNames)\"",
+    "fix": "Build with `--dts false` and emit declarations via tsc, or pin typescript to ^6.x until tsup supports the native compiler"
   }
 }
