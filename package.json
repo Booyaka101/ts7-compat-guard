@@ -63,7 +63,7 @@
     "semver": "^7.6.0"
   },
   "devDependencies": {
-    "esbuild": "^0.23.0"
+    "esbuild": "^0.28.1"
   },
   "repository": {
     "type": "git",
