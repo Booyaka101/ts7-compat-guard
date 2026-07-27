@@ -224,12 +224,17 @@ function writeSarif(results, root, version, file) {
   }
 }
 
+/**
+ * The version is injected at build time via esbuild --define.
+ *
+ * It used to be `require('../package.json').version`, but esbuild inlines the
+ * WHOLE manifest when it sees that, so any unrelated package.json edit — a new
+ * script, an allowScripts entry — changed dist/action.js and reddened the
+ * bundle-drift job. That happened three times in one day. Injecting just the
+ * string keeps the bundle a function of the source only.
+ */
 function safeVersion() {
-  try {
-    return require('../package.json').version;
-  } catch (_) {
-    return '0.0.0';
-  }
+  return typeof __TS7_VERSION__ === 'string' ? __TS7_VERSION__ : '0.0.0';
 }
 
 if (require.main === module) {

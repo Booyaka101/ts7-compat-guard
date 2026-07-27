@@ -23,7 +23,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "esbuild src/action.js --bundle --platform=node --target=node20 --outfile=dist/action.js",
+    "build": "node scripts/build.mjs",
     "build:check": "npm run build && git diff --exit-code -- dist/ || (echo 'dist/ is out of date — commit the rebuilt bundle' && exit 1)",
     "test": "node test/run.js",
     "prepack": "npm run build",

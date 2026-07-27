@@ -3229,91 +3229,6 @@ var require_sarif = __commonJS({
   }
 });
 
-// package.json
-var require_package = __commonJS({
-  "package.json"(exports2, module2) {
-    module2.exports = {
-      name: "ts7-compat-guard",
-      version: "2.2.0",
-      description: "TypeScript 7.0 / tsgo readiness scanner \u2014 flags Compiler-API dependencies, removed tsconfig.json options (with exact line numbers), and behavioural advisories before they break your build. Manifest/config only, no source-file scanning, no false positives. npx CLI + GitHub Action + SARIF.",
-      bin: {
-        "ts7-compat-guard": "src/cli.js"
-      },
-      main: "src/core.js",
-      exports: {
-        ".": "./src/core.js",
-        "./report": "./src/report.js",
-        "./sarif": "./src/sarif.js",
-        "./tsconfig": "./src/tsconfig.js",
-        "./db.json": "./src/db.json",
-        "./package.json": "./package.json"
-      },
-      files: [
-        "src/",
-        "dist/",
-        "action.yml",
-        "README.md",
-        "CHANGELOG.md",
-        "LICENSE"
-      ],
-      scripts: {
-        build: "esbuild src/action.js --bundle --platform=node --target=node20 --outfile=dist/action.js",
-        "build:check": "npm run build && git diff --exit-code -- dist/ || (echo 'dist/ is out of date \u2014 commit the rebuilt bundle' && exit 1)",
-        test: "node test/run.js",
-        prepack: "npm run build",
-        prepublishOnly: "npm run build && npm test"
-      },
-      keywords: [
-        "typescript",
-        "typescript-7",
-        "tsgo",
-        "typescript-go",
-        "corsa",
-        "readiness",
-        "tsconfig",
-        "compiler-api",
-        "compatibility",
-        "migration",
-        "decorators",
-        "emitdecoratormetadata",
-        "vue",
-        "volar",
-        "astro",
-        "svelte",
-        "angular",
-        "ts-morph",
-        "typescript-eslint",
-        "github-action",
-        "ci",
-        "linter",
-        "sarif"
-      ],
-      author: "ts7-compat-guard contributors",
-      license: "MIT",
-      engines: {
-        node: ">=18"
-      },
-      dependencies: {
-        semver: "^7.6.0"
-      },
-      devDependencies: {
-        esbuild: "^0.28.1"
-      },
-      repository: {
-        type: "git",
-        url: "git+https://github.com/Booyaka101/ts7-compat-guard.git"
-      },
-      homepage: "https://github.com/Booyaka101/ts7-compat-guard#readme",
-      bugs: {
-        url: "https://github.com/Booyaka101/ts7-compat-guard/issues"
-      },
-      allowScripts: {
-        "esbuild@0.28.1": true
-      }
-    };
-  }
-});
-
 // src/action.js
 var path = require("node:path");
 var fs = require("node:fs");
@@ -3498,11 +3413,7 @@ function writeSarif(results, root, version, file) {
   }
 }
 function safeVersion() {
-  try {
-    return require_package().version;
-  } catch (_) {
-    return "0.0.0";
-  }
+  return true ? "2.2.0" : "0.0.0";
 }
 if (require.main === module) {
   main();
