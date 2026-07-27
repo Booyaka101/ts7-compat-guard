@@ -1,7 +1,11 @@
 "use strict";
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 
 // node_modules/semver/internal/constants.js
@@ -1317,7 +1321,7 @@ var require_range = __commonJS({
 var require_comparator = __commonJS({
   "node_modules/semver/classes/comparator.js"(exports2, module2) {
     "use strict";
-    var ANY = Symbol("SemVer ANY");
+    var ANY = /* @__PURE__ */ Symbol("SemVer ANY");
     var Comparator = class _Comparator {
       static get ANY() {
         return ANY;
@@ -2258,6 +2262,14 @@ var require_tsconfig = __commonJS({
         reason: "You rely on `emitDecoratorMetadata` (reflect-metadata DI \u2014 NestJS, TypeORM, Angular, class-transformer). The native Go compiler's design-time metadata emit is still unresolved upstream (typescript-go#741); do not assume runtime parity on 7.0.",
         fix: "Verify your DI/ORM works against the native compiler before upgrading; keep `typescript` on 6.x for the metadata-emitting build until parity is confirmed.",
         helpUri: DECORATORS_URI
+      },
+      {
+        id: "implicit-types-inclusion",
+        key: "types",
+        applies: ({ optionsSet, deps }) => !optionsSet.has("types") && Object.keys(deps || {}).some((d) => d.startsWith("@types/")),
+        title: 'no explicit "types" \u2014 @types packages may not be included on 7.0',
+        reason: "You depend on @types/* packages but your tsconfig has no `types` field, so inclusion relies on TypeScript scanning node_modules/@types automatically. On the native compiler that did not happen in practice: a project with @types/node and no `types` field failed to build with TS2591 \"Cannot find name 'process'\" and TS2584 \"Cannot find name 'console'\" \u2014 tsgo's own error text tells you to add 'node' to the types field.",
+        fix: 'Add an explicit `"types": ["node", \u2026]` listing the @types packages this project actually needs. It is a no-op on TypeScript 5/6 \u2014 it pins what was already being inferred \u2014 and it unblocks the 7.0 upgrade.'
       },
       {
         id: "ignore-deprecations",
@@ -3218,7 +3230,7 @@ var require_package = __commonJS({
   "package.json"(exports2, module2) {
     module2.exports = {
       name: "ts7-compat-guard",
-      version: "2.0.1",
+      version: "2.1.0",
       description: "TypeScript 7.0 / tsgo readiness scanner \u2014 flags Compiler-API dependencies, removed tsconfig.json options (with exact line numbers), and behavioural advisories before they break your build. Manifest/config only, no source-file scanning, no false positives. npx CLI + GitHub Action + SARIF.",
       bin: {
         "ts7-compat-guard": "src/cli.js"
@@ -3281,7 +3293,7 @@ var require_package = __commonJS({
         semver: "^7.6.0"
       },
       devDependencies: {
-        esbuild: "^0.23.0"
+        esbuild: "^0.28.1"
       },
       repository: {
         type: "git",
