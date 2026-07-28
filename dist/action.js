@@ -3413,7 +3413,14 @@ function writeSarif(results, root, version, file) {
   }
 }
 function safeVersion() {
-  return true ? "2.2.0" : "0.0.0";
+  if (true) return "2.2.1";
+  try {
+    const fs2 = require("node:fs");
+    const path2 = require("node:path");
+    return JSON.parse(fs2.readFileSync(path2.join(__dirname, "..", "package.json"), "utf8")).version;
+  } catch (_) {
+    return "0.0.0";
+  }
 }
 if (require.main === module) {
   main();

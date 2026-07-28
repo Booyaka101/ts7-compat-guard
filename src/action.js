@@ -234,7 +234,17 @@ function writeSarif(results, root, version, file) {
  * string keeps the bundle a function of the source only.
  */
 function safeVersion() {
-  return typeof __TS7_VERSION__ === 'string' ? __TS7_VERSION__ : '0.0.0';
+  if (typeof __TS7_VERSION__ === 'string') return __TS7_VERSION__;
+  // Unbundled (src/ ships to npm, where the define does not exist). Read at
+  // runtime rather than `require('../package.json')` — esbuild cannot inline a
+  // readFileSync, so the bundle stays decoupled from the manifest.
+  try {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version;
+  } catch (_) {
+    return '0.0.0';
+  }
 }
 
 if (require.main === module) {
