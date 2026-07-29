@@ -49,10 +49,14 @@ Plus: npm pack → clean-dir install (relative tarball path) → bin runs, --ver
   (nobody can depend on it) and harmless; `db --check` reports it "unknown (404)" as designed.
   v3.1 lead: replace it with @vue/language-core + @vue/language-server.
 - `db --check` skips prereleases when proposing ts7Ready (conservative by design).
-- Owner distribution steps (phone): push, `npm publish`, tag v3.0.0 + move v3 major tag
-  (tags created locally here), GitHub release with the CHANGELOG 3.0.0 entry. Best first
-  distribution: comment on the live "TS7 support" threads that the guard now recognises
-  the official @typescript/typescript6 escape hatch and dated readiness.
+- Distribution DONE (2026-07-29, owner-authorized): pushed main + tags (v3.0.0, v3 moved);
+  `npm publish` → ts7-compat-guard@3.0.0 is dist-tag latest (verified via npm view);
+  GitHub release https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v3.0.0;
+  CI/Guards/self-test all green on the release commit. Announce comment posted on
+  nestjs/nest-cli#3479 (open, on-topic — thread already discussed the alias layout):
+  https://github.com/nestjs/nest-cli/issues/3479#issuecomment-5112249808.
+  vercel/next.js#95633 no longer exists (404) and cypress-io/cypress#34258 is closed —
+  deliberately NOT posted there (no spamming closed/irrelevant threads).
 
 ## Build/test commands
 - `npm install` · `npm run build` (rebuild dist/ before tagging; CI enforces drift) · `npm test`
