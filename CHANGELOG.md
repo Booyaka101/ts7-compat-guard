@@ -4,6 +4,92 @@ All notable changes to `ts7-compat-guard` are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-07-29
+
+The name list becomes a **dated readiness ledger**, and the officially
+documented TS6 API shim becomes first-class. Rationale: flagging a CONFLICT on
+package *name* alone was correct on GA day (2026-07-08) and gets more wrong
+every week — typescript-eslint v8.65.0 (2026-07-20) already ships a "TS 7
+detected" warning — while a repo that adopted the announcement's documented
+`@typescript/typescript6` escape hatch still got a wall of CONFLICTs (or, in
+the alias layout, was misread as plain TypeScript 6).
+
+### Added
+- **Readiness ledger**: db entries gain optional `ts7Ready` (semver range),
+  `ts7Status` (`"none" | "partial" | "supported"`), `source` (URL) and
+  `checkedAt` (ISO date); the db gains a top-level `generatedAt`. For each
+  covered dependency the guard resolves the **effective version** — the
+  installed `node_modules/<pkg>/package.json` version when present (per package
+  dir, falling back to the repo root in monorepos), else the minimum of the
+  declared range. Satisfies `ts7Ready` → new **NOTICE** severity (never fails);
+  `ts7Status: "partial"` → warning with the source URL; no `ts7Ready` → the
+  classic conflict, unchanged. Prereleases compare with `includePrerelease`;
+  malformed installed manifests fall back to the declared range.
+- **TS6 API shim detection** (`@typescript/typescript6`), both documented
+  layouts: a plain dependency, and any `npm:@typescript/typescript6@…` alias —
+  including the `typescript` key itself. When present: a "TS6 API shim present"
+  advisory, and every Compiler-API dependency conflict is **downgraded to a
+  warning** (removed-tsconfig-option conflicts are *not* downgraded — the shim
+  restores the API, not the config options).
+- **Alias-target resolution**: `"@typescript/native": "npm:typescript@^7.0.2"`
+  (any key name) now reports TypeScript 7.0 as installed, and
+  `"typescript": "npm:@typescript/typescript6@^6.0.2"` reports the TS6 API
+  half explicitly. v2 stripped alias targets (src/core.js) and misread the
+  announcement's exact side-by-side layout as plain TypeScript 6.
+- **`db --check` subcommand** (opt-in network; never runs during a scan or in
+  the Action): fetches each db package's npm registry document, walks the
+  versions map, and finds the earliest stable release whose **bounded**
+  typescript peer range widens to admit 7.x; prints a proposed db.json patch +
+  diff and **writes nothing**. Unbounded ranges (`*`, `>=2.7`, …) are *never*
+  proposed as supported — measured 2026-07-29, 7 of the 25 covered packages
+  carry unbounded ranges while being known-broken. 404/network/missing-peer
+  cases report `unknown` instead of crashing. `--from <dir>` reads local
+  packument files; `--json` emits the patch machine-readably.
+- **Stale-db notice**: when the bundled ledger's `generatedAt` is older than
+  60 days, scans print a non-failing refresh suggestion.
+- Action outputs **`notice-count`** and **`shim-detected`**; `status` gains a
+  `notice` value; NOTICE annotations for TS7-ready deps; SARIF carries notices
+  as `level: note` under `ts7-compat/ready/<pkg>`.
+- Seeded readiness data for all 25 packages — truthfully all
+  `ts7Status: "none"` as of 2026-07-29 (verified against the registry: not one
+  ships a bounded peer range admitting 7.x), each with a real `source` URL and
+  `checkedAt`. No invented version numbers.
+- 37 new tests (151 total).
+
+### Changed
+- **BREAKING (exit codes)**: repos whose flagged dependencies satisfy
+  `ts7Ready`, or which have the TS6 shim installed, now exit **0** where v2
+  exited 1. Removed tsconfig options on TS7 still exit 1.
+- **BREAKING (db shape)**: `src/db.json` is now
+  `{ generatedAt, packages: { … } }`. The `ts7-compat-guard` module still
+  exports the flat map as `db` / `builtinDb`; `--db` / `.ts7guardrc.json`
+  extra entries stay flat and may carry the new fields.
+- JSON report: per-entry `severity` (a shim downgrade or partial status can
+  differ from the run-level `ts7` flag), plus `notices`, `noticeCount`, `shim`,
+  `dbStale`, and `effectiveVersion` fields.
+
+## [2.2.1] - 2026-07-28
+
+### Changed
+- Build: the version string is injected via esbuild `define` instead of
+  inlining all of `package.json` into `dist/action.js`, so unrelated manifest
+  edits no longer change the bundle (kept reddening the CI bundle-drift gate).
+  Unbundled `src/action.js` reads the version at runtime via `readFileSync`.
+
+## [2.2.0] - 2026-07-27
+
+### Added
+- CI: `allowScripts` allowlist for npm v12 + drift gate.
+
+## [2.1.0] - 2026-07-27
+
+### Added
+- New advisory: missing tsconfig `types` field while `@types/*` packages are
+  installed — on the native compiler automatic `node_modules/@types` scanning
+  did not happen in practice (TS2591/TS2584).
+- `tsup` added to the database (25 entries): its `.d.ts` step drives the
+  Compiler API and crashes on 7.0.
+
 ## [2.0.1] - 2026-07-26
 
 ### Changed
@@ -82,6 +168,10 @@ Initial release.
 - 84 tests covering core, report, SARIF, CLI (in-process + spawned), the Action,
   and the bundled `dist`.
 
+[3.0.0]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v3.0.0
+[2.2.1]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v2.2.1
+[2.2.0]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v2.2.0
+[2.1.0]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v2.1.0
 [2.0.1]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v2.0.1
 [2.0.0]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v2.0.0
 [1.0.0]: https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v1.0.0

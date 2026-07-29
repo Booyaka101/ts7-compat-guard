@@ -20,8 +20,19 @@ so no false positives):
   2. tsconfig.json options removed in TypeScript 7.0 (with exact line numbers)
   3. behavioural advisories (strict-by-default, emitDecoratorMetadata, …)
 
+A normal scan is fully offline — it reads package.json / tsconfig.json /
+node_modules/*/package.json and never touches the network. The only network
+command is the opt-in \`db --check\`.
+
 Usage:
   npx ts7-compat-guard [options]
+  npx ts7-compat-guard db --check [--from <dir>] [--json]
+
+Subcommands:
+  db --check          Query registry.npmjs.org for every db package, find the
+                      earliest release whose BOUNDED typescript peer range
+                      admits 7.x, and print a proposed db.json patch (writes
+                      nothing; see --help after "db" for details)
 
 Options:
   --dir <path>        Directory containing package.json (default: current dir)
@@ -197,7 +208,7 @@ function run(argv, io = {}) {
       err(`Error: no package.json found under ${path.resolve(opts.dir)}\n`);
       return 2;
     }
-    const agg = core.analyzeMany(dirs, analyzeOpts);
+    const agg = core.analyzeMany(dirs, Object.assign({ root: opts.dir }, analyzeOpts));
 
     if (opts.sarif) {
       const sarif = buildSarif(agg.results, {
@@ -259,7 +270,23 @@ function argvHasMode(argv) {
 }
 
 if (require.main === module) {
-  process.exitCode = run(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'db') {
+    // The only network-touching command, opt-in and async. A normal scan (and
+    // the Action) never reaches this path.
+    const { runDbCheck } = require('./db-check');
+    runDbCheck(argv.slice(1)).then(
+      (code) => {
+        process.exitCode = code;
+      },
+      (e) => {
+        process.stderr.write(`Error: ${e.message}\n`);
+        process.exitCode = 2;
+      }
+    );
+  } else {
+    process.exitCode = run(argv);
+  }
 }
 
 module.exports = { run, parseArgs, loadExtraDb, UsageError };

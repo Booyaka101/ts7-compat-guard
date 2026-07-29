@@ -1,0 +1,9 @@
+{
+  "name": "fixture-ts7-shim-tsconfig",
+  "private": true,
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "@typescript/typescript6": "^6.0.2",
+    "ts-morph": "^22.0.0"
+  }
+}

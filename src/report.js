@@ -10,7 +10,22 @@ function statusOf(result) {
   if (result.hasActiveConflict) return 'conflict';
   if (result.warningCount > 0) return 'warning';
   if (result.advisoryCount > 0) return 'advisory';
+  if (result.noticeCount > 0) return 'notice';
   return 'clean';
+}
+
+/** Per-entry severity with the pre-v3 fallback (ts7 → conflict, else warning). */
+function depSeverity(conf, result) {
+  return conf.severity || (result.ts7 ? 'conflict' : 'warning');
+}
+
+/** One NOTICE line for a TS7-ready dependency. */
+function noticeText(n) {
+  const meta = [];
+  if (n.source) meta.push(`source: ${n.source}`);
+  if (n.checkedAt) meta.push(`checked ${n.checkedAt}`);
+  const suffix = meta.length ? ` (${meta.join(', ')})` : '';
+  return `NOTICE: ${n.pkg} ${n.effectiveVersion} — TS7 supported since ${n.readySince || n.ts7Ready}${suffix}`;
 }
 
 /**
@@ -28,18 +43,45 @@ function humanReport(result, opts = {}) {
     result.typescript.source && result.typescript.source !== 'dependencies'
       ? c.dim(` (via ${result.typescript.source})`)
       : '';
-  if (tsRaw == null) {
+  const ts = result.typescript || {};
+  if (ts.shimAlias) {
+    // The announcement's side-by-side layout: `typescript` aliased to the shim.
+    lines.push(
+      '  ' +
+        c.green(`typescript ${tsRaw} → TS6 API shim (@typescript/typescript6)`) +
+        c.dim(' — Compiler-API consumers resolve the TypeScript 6 API') +
+        srcNote
+    );
+  } else if (tsRaw == null) {
     lines.push(c.dim('  typescript: not a direct dependency'));
   } else if (result.ts7) {
     lines.push('  ' + c.red(`typescript ${tsRaw} → TypeScript 7.0 detected`) + srcNote);
   } else {
     lines.push('  ' + c.green(`typescript ${tsRaw} → TypeScript 6.x (pre-7.0)`) + srcNote);
   }
+  if (ts.ts7Alias) {
+    lines.push(
+      '  ' + c.red(`TypeScript 7.0 detected via "${ts.ts7Alias.key}": ${ts.ts7Alias.raw}`)
+    );
+  }
+  if (result.shim && result.shim.present) {
+    lines.push(
+      '  ' +
+        c.green(
+          `✓ TS6 API shim present (@typescript/typescript6${result.shim.layout === 'alias' ? ', aliased' : ''}) — Compiler-API conflicts downgraded to warnings`
+        )
+    );
+    lines.push('    ' + c.dim(`see ${result.shim.helpUri}`));
+  }
 
   const tsFindings = (result.tsconfig && result.tsconfig.findings) || [];
   const risks = result.risks || [];
+  const notices = result.notices || [];
   const nothing =
-    result.conflicts.length === 0 && tsFindings.length === 0 && risks.length === 0;
+    result.conflicts.length === 0 &&
+    tsFindings.length === 0 &&
+    risks.length === 0 &&
+    notices.length === 0;
 
   if (result.tsconfig && result.tsconfig.parseError) {
     lines.push('  ' + c.yellow(`tsconfig.json: could not parse (${result.tsconfig.parseError})`));
@@ -48,21 +90,38 @@ function humanReport(result, opts = {}) {
   if (nothing) {
     lines.push('');
     lines.push(c.green('  ✓ No TypeScript 7.0 / tsgo readiness issues found.'));
+    appendStaleDb(lines, result, c);
     appendIgnored(lines, result, c);
     return lines;
   }
 
   // ---- dependencies ----
-  if (result.conflicts.length > 0) {
+  if (result.conflicts.length > 0 || notices.length > 0) {
     lines.push('');
     lines.push(c.bold('  [dependencies]'));
-    if (result.ts7) {
-      for (const conf of result.conflicts) {
+    for (const conf of result.conflicts) {
+      const sev = depSeverity(conf, result);
+      if (sev === 'conflict') {
         lines.push('  ' + c.red(`CONFLICT: ${conf.pkg} — ${conf.reason}`));
         lines.push('    ' + c.yellow(`Fix: ${conf.fix}`));
-      }
-    } else {
-      for (const conf of result.conflicts) {
+      } else if (conf.downgradedByShim) {
+        lines.push(
+          '  ' +
+            c.yellow(
+              `WARNING: ${conf.pkg} — ${conf.reason} (downgraded: TS6 API shim present)`
+            )
+        );
+        lines.push('    ' + c.dim(`Fix: ${conf.fix}`));
+      } else if (conf.partial) {
+        lines.push(
+          '  ' +
+            c.yellow(
+              `WARNING: ${conf.pkg}${conf.effectiveVersion ? ' ' + conf.effectiveVersion : ''} — partial TypeScript 7 support${conf.source ? ` (source: ${conf.source})` : ''}`
+            )
+        );
+        lines.push('    ' + c.dim(`Reason: ${conf.reason}`));
+        lines.push('    ' + c.dim(`Fix: ${conf.fix}`));
+      } else {
         lines.push(
           '  ' +
             c.yellow(
@@ -72,6 +131,9 @@ function humanReport(result, opts = {}) {
         lines.push('    ' + c.dim(`Reason: ${conf.reason}`));
         lines.push('    ' + c.dim(`Fix: ${conf.fix}`));
       }
+    }
+    for (const n of notices) {
+      lines.push('  ' + c.green(noticeText(n)));
     }
   }
 
@@ -108,20 +170,41 @@ function humanReport(result, opts = {}) {
   const parts = [];
   if (result.activeConflictCount > 0) parts.push(`${result.activeConflictCount} conflict(s)`);
   if (result.warningCount > 0) parts.push(`${result.warningCount} warning(s)`);
+  if (result.noticeCount > 0) parts.push(`${result.noticeCount} notice(s)`);
   if (result.advisoryCount > 0) parts.push(`${result.advisoryCount} advisory(ies)`);
   const summary = `  ${parts.join(' · ')}`;
   if (result.hasActiveConflict) {
     lines.push(c.red(summary + ' — type-checking/builds will break under TypeScript 7.0.'));
+  } else if (result.warningCount > 0 && result.shim && result.shim.present) {
+    lines.push(
+      c.yellow(summary + ' — the TS6 API shim keeps Compiler-API tools working; nothing is build-breaking.')
+    );
+  } else if (result.warningCount > 0 && result.ts7) {
+    lines.push(c.yellow(summary + ' — nothing is build-breaking yet; review the warnings.'));
   } else if (result.warningCount > 0) {
     lines.push(
       c.yellow(summary + ' — you are on TypeScript 6.x today, so nothing is broken yet.')
     );
-  } else {
+  } else if (result.advisoryCount > 0) {
     lines.push(c.cyan(summary + ' — no build-breaking issues; review advisories before upgrading.'));
+  } else {
+    lines.push(c.green(summary + ' — all flagged dependencies have TypeScript 7 support.'));
   }
 
+  appendStaleDb(lines, result, c);
   appendIgnored(lines, result, c);
   return lines;
+}
+
+function appendStaleDb(lines, result, c) {
+  if (result.dbStale && result.dbStale.stale) {
+    lines.push('');
+    lines.push(
+      c.dim(
+        `  Note: readiness db generated ${result.dbStale.generatedAt} (${result.dbStale.days} days ago) — entries may be stale; refresh with \`ts7-compat-guard db --check\`.`
+      )
+    );
+  }
 }
 
 function appendIgnored(lines, result, c) {
@@ -155,32 +238,43 @@ function humanReportMany(agg, opts = {}) {
     }
     const tsFindings = (r.tsconfig && r.tsconfig.findings) || [];
     const risks = r.risks || [];
+    const notices = r.notices || [];
+    const shimNote = r.shim && r.shim.present ? c.green('  [TS6 shim]') : '';
     if (r.hasActiveConflict) {
-      lines.push('  ' + c.red(`● ${rel}`) + c.dim(`  (typescript ${r.typescript.raw})`));
-      if (r.ts7) {
-        for (const conf of r.conflicts) {
-          lines.push('      ' + c.red(`CONFLICT: ${conf.pkg} — ${conf.reason}`));
-          lines.push('        ' + c.yellow(`Fix: ${conf.fix}`));
-        }
+      lines.push('  ' + c.red(`● ${rel}`) + c.dim(`  (typescript ${r.typescript.raw})`) + shimNote);
+      for (const conf of r.conflicts.filter((x) => depSeverity(x, r) === 'conflict')) {
+        lines.push('      ' + c.red(`CONFLICT: ${conf.pkg} — ${conf.reason}`));
+        lines.push('        ' + c.yellow(`Fix: ${conf.fix}`));
       }
       for (const f of tsFindings.filter((x) => x.severity === 'conflict')) {
         lines.push('      ' + c.red(`CONFLICT: ${f.option} — ${f.title}`) + c.dim(` (${f.file}:${f.line})`));
         lines.push('        ' + c.yellow(`Fix: ${f.fix}`));
       }
+      for (const n of notices) lines.push('      ' + c.green(noticeText(n)));
     } else if (r.warningCount > 0) {
-      lines.push('  ' + c.yellow(`○ ${rel}`) + c.dim(`  (typescript ${r.typescript.raw || 'n/a'})`));
+      lines.push('  ' + c.yellow(`○ ${rel}`) + c.dim(`  (typescript ${r.typescript.raw || 'n/a'})`) + shimNote);
       for (const conf of r.conflicts) {
-        lines.push(
-          '      ' + c.yellow(`WARNING: ${conf.pkg} will break when typescript is upgraded to ^7.`)
-        );
+        if (conf.downgradedByShim) {
+          lines.push('      ' + c.yellow(`WARNING: ${conf.pkg} — ${conf.reason} (downgraded: TS6 API shim present)`));
+        } else if (conf.partial) {
+          lines.push('      ' + c.yellow(`WARNING: ${conf.pkg} — partial TypeScript 7 support${conf.source ? ` (source: ${conf.source})` : ''}`));
+        } else {
+          lines.push(
+            '      ' + c.yellow(`WARNING: ${conf.pkg} will break when typescript is upgraded to ^7.`)
+          );
+        }
       }
       for (const f of tsFindings.filter((x) => x.severity === 'warning')) {
         lines.push('      ' + c.yellow(`WARNING: ${f.option} — ${f.title} (breaks on upgrade).`));
       }
+      for (const n of notices) lines.push('      ' + c.green(noticeText(n)));
     } else if (risks.length > 0) {
-      lines.push('  ' + c.cyan(`◍ ${rel}`) + c.dim(`  (${risks.length} advisory(ies))`));
+      lines.push('  ' + c.cyan(`◍ ${rel}`) + c.dim(`  (${risks.length} advisory(ies))`) + shimNote);
+    } else if (notices.length > 0) {
+      lines.push('  ' + c.green(`✓ ${rel}`) + c.dim(`  (${notices.length} TS7-ready dep(s))`) + shimNote);
+      for (const n of notices) lines.push('      ' + c.green(noticeText(n)));
     } else {
-      lines.push('  ' + c.green(`✓ ${rel}`) + c.dim('  (clean)'));
+      lines.push('  ' + c.green(`✓ ${rel}`) + c.dim('  (clean)') + shimNote);
     }
   }
 
@@ -190,6 +284,7 @@ function humanReportMany(agg, opts = {}) {
     `  ${s.packagesScanned} scanned · ` +
     `${s.activeConflictPackages} with active conflicts · ` +
     `${s.packagesWithConflicts - s.activeConflictPackages} with warnings · ` +
+    `${s.totalNotices || 0} notice(s) · ` +
     `${s.totalAdvisories} advisory(ies) · ` +
     `${s.errors} error(s)`;
   lines.push(s.activeConflictPackages > 0 ? c.red(summaryLine) : c.green(summaryLine));
@@ -204,16 +299,33 @@ function jsonReport(result) {
     tool: 'ts7-compat-guard',
     ts7: result.ts7,
     typescript: result.typescript,
+    shim: result.shim || { present: false },
+    dbStale: result.dbStale || { stale: false, generatedAt: null, days: null },
     status: statusOf(result),
     conflictCount: result.activeConflictCount,
     warningCount: result.warningCount,
+    noticeCount: result.noticeCount || 0,
     advisoryCount: result.advisoryCount,
     conflicts: result.conflicts.map((conf) => ({
       pkg: conf.pkg,
       version: conf.version,
+      effectiveVersion: conf.effectiveVersion || null,
       reason: conf.reason,
       fix: conf.fix,
-      severity: result.ts7 ? 'conflict' : 'warning',
+      severity: depSeverity(conf, result),
+      downgradedByShim: !!conf.downgradedByShim,
+      partial: !!conf.partial,
+      source: conf.source || null,
+    })),
+    notices: (result.notices || []).map((n) => ({
+      pkg: n.pkg,
+      version: n.version,
+      effectiveVersion: n.effectiveVersion,
+      ts7Ready: n.ts7Ready,
+      readySince: n.readySince,
+      source: n.source,
+      checkedAt: n.checkedAt,
+      severity: 'notice',
     })),
     tsconfig: {
       present: !!(result.tsconfig && result.tsconfig.present),

@@ -1,0 +1,8 @@
+{
+  "name": "fake-unbounded",
+  "dist-tags": { "latest": "2.0.0" },
+  "versions": {
+    "1.0.0": { "name": "fake-unbounded", "version": "1.0.0", "peerDependencies": { "typescript": "*" } },
+    "2.0.0": { "name": "fake-unbounded", "version": "2.0.0", "peerDependencies": { "typescript": ">=4.5.0" } }
+  }
+}

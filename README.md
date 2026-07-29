@@ -18,11 +18,23 @@ TypeScript 7.0 shipped GA on **2026-07-08**: the native Go rewrite ("tsgo"),
 it — as a **fail-the-build GitHub Action**, an **`npx` CLI**, or **SARIF** for
 code scanning.
 
-> **Accuracy is the point.** It reads `package.json` and `tsconfig.json` only — it
-> never parses your source, so it never cries wolf. Things that TS7 *changes* but
-> can't be proven to break your code (decorator metadata, strict-by-default) are
-> reported as **advisories**, clearly separated from hard conflicts, and never
-> fail your build.
+Since **v3** the database is a **dated readiness ledger**, not a name blacklist:
+each entry can carry `ts7Ready` (the release range that actually supports TS7),
+so a repo whose tools *have* caught up gets a green **notice** instead of a
+stale conflict. v3 also makes the officially documented escape hatch —
+[`@typescript/typescript6`](https://www.npmjs.com/package/@typescript/typescript6),
+the TS6 API shim — **first-class**: both documented layouts are detected, and
+Compiler-API conflicts are downgraded to warnings when the shim is present
+(removed tsconfig options are **not** downgraded — the shim restores the API,
+not the config options).
+
+> **Accuracy is the point.** It reads `package.json`, `tsconfig.json` and
+> installed `node_modules/*/package.json` versions only — it never parses your
+> source, so it never cries wolf. Things that TS7 *changes* but can't be proven
+> to break your code (decorator metadata, strict-by-default) are reported as
+> **advisories**, clearly separated from hard conflicts, and never fail your
+> build. A normal scan is fully **offline**; the only network command is the
+> opt-in `db --check`.
 
 Sources: [Announcing TypeScript 7.0 (Microsoft devblog)](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/) · [TypeScript-Go decorators discussion #741](https://github.com/microsoft/typescript-go/discussions/741)
 
@@ -32,8 +44,9 @@ Sources: [Announcing TypeScript 7.0 (Microsoft devblog)](https://devblogs.micros
 
 | Pillar | Source | Severity |
 |--------|--------|----------|
-| **Compiler-API dependencies** — 24 packages that embed the removed programmatic API | `package.json` | `conflict` on TS7 · `warning` on TS6 |
-| **Removed tsconfig options** — 17 options + `references.prepend`, with exact line numbers | `tsconfig.json` | `conflict` on TS7 · `warning` on TS6 |
+| **Compiler-API dependencies** — 25 packages that embed the removed programmatic API | `package.json` + installed versions | `conflict` on TS7 · `warning` on TS6/shim/partial · `notice` when the installed version satisfies `ts7Ready` |
+| **TS6 API shim** — `@typescript/typescript6`, both documented layouts | `package.json` | advisory line; downgrades Compiler-API conflicts to `warning` |
+| **Removed tsconfig options** — 17 options + `references.prepend`, with exact line numbers | `tsconfig.json` | `conflict` on TS7 · `warning` on TS6 (never downgraded by the shim) |
 | **Behavioural advisories** — `strict` default, `emitDecoratorMetadata`, `ignoreDeprecations` | `tsconfig.json` (+ dep context) | `advisory` (never fails) |
 
 Only `conflict`-severity findings (something that *will* break under TS7) fail a
@@ -56,6 +69,10 @@ npx ts7-compat-guard --sarif-file ts7-compat.sarif
 
 # dependencies only (skip tsconfig analysis)
 npx ts7-compat-guard --no-tsconfig
+
+# maintainer/curious: propose readiness-db updates from the npm registry
+# (opt-in, the ONLY command that touches the network; writes nothing)
+npx ts7-compat-guard db --check
 ```
 
 ### Example
@@ -81,6 +98,37 @@ npx ts7-compat-guard --no-tsconfig
   2 conflict(s) · 1 advisory(ies) — type-checking/builds will break under TypeScript 7.0.
 ```
 
+### Example — the announcement's side-by-side layout (new in v3)
+
+A repo that followed the [7.0 announcement](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/)
+and aliased `typescript` to the TS6 shim while installing TS7 under
+`@typescript/native` — v2 misread this as "plain TypeScript 6"; v3 reports it
+correctly and exits 0:
+
+```
+=== TypeScript 7.0 / tsgo Readiness ===
+  typescript npm:@typescript/typescript6@^6.0.2 → TS6 API shim (@typescript/typescript6) — Compiler-API consumers resolve the TypeScript 6 API (via devDependencies)
+  TypeScript 7.0 detected via "@typescript/native": npm:typescript@^7.0.2
+  ✓ TS6 API shim present (@typescript/typescript6, aliased) — Compiler-API conflicts downgraded to warnings
+    see https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/
+
+  [dependencies]
+  WARNING: ts-morph — Built entirely on the TypeScript Compiler API (downgraded: TS6 API shim present)
+    Fix: Wait for ts-morph TypeScript 7.1 support or pin typescript to ^6.x
+
+  1 warning(s) — the TS6 API shim keeps Compiler-API tools working; nothing is build-breaking.
+```
+
+And a repo whose tooling has already caught up (a db entry with `ts7Ready`
+satisfied by the installed version) gets a notice, not a conflict:
+
+```
+  [dependencies]
+  NOTICE: typescript-eslint 8.70.0 — TS7 supported since 8.70.0 (source: https://github.com/typescript-eslint/typescript-eslint/releases, checked 2026-07-29)
+
+  1 notice(s) — all flagged dependencies have TypeScript 7 support.
+```
+
 ### Options
 
 | Flag | Default | Meaning |
@@ -101,9 +149,70 @@ npx ts7-compat-guard --no-tsconfig
 
 | Code | When |
 |------|------|
-| `0` | No build-breaking conflicts (or `--mode warn`). Warnings & advisories do **not** fail. |
-| `1` | A Compiler-API dependency **or** a removed tsconfig option, while on TypeScript 7.0 (`--mode fail`) |
+| `0` | No build-breaking conflicts (or `--mode warn`). Warnings, notices & advisories do **not** fail. |
+| `1` | A Compiler-API dependency (not TS7-ready, no shim) **or** a removed tsconfig option, while on TypeScript 7.0 (`--mode fail`) |
 | `2` | Usage / runtime error (e.g. no `package.json`) |
+
+> **Breaking change in v3:** a repo whose flagged dependencies satisfy their
+> `ts7Ready` range, or which has the `@typescript/typescript6` shim installed,
+> now exits **0** where v2 exited 1. Removed tsconfig options still exit 1.
+
+## The TS6 API shim (`@typescript/typescript6`)
+
+TypeScript 7.0 ships **without** a programmatic API (deferred to 7.1). The
+[announcement](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/)
+documents an official escape hatch — `@typescript/typescript6`, which re-exports
+the TypeScript 6 API (and a `tsc6` binary) so Compiler-API tools keep working.
+v3 recognises **both documented layouts**:
+
+```jsonc
+// Layout A — plain dependency
+{ "devDependencies": {
+    "typescript": "^7.0.2",
+    "@typescript/typescript6": "^6.0.2"
+} }
+
+// Layout B — the announcement's alias layout: `tsc` is 7.0, the API is 6.0
+{ "devDependencies": {
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "@typescript/native": "npm:typescript@^7.0.2"
+} }
+```
+
+With either layout present, the scan prints **`TS6 API shim present`**,
+downgrades every Compiler-API dependency conflict to a warning, and exits 0.
+Removed-tsconfig-option conflicts are **not** downgraded — the shim restores
+the API, not the removed options. In layout B the guard resolves the alias
+*targets*: it reports TypeScript 7.0 as installed (via the `npm:typescript@^7`
+alias, whatever the key is named) and the `typescript` key as the TS6 API half —
+v2 misread this layout as plain TypeScript 6.
+
+## `db --check` — keeping the ledger honest
+
+```bash
+npx ts7-compat-guard db --check           # against registry.npmjs.org (no auth)
+npx ts7-compat-guard db --check --json    # machine-readable proposed patch
+```
+
+For every db package it fetches the npm registry document, walks the versions
+map oldest-to-newest, reads each version's `peerDependencies.typescript`, and
+finds the earliest **stable** release at which a **bounded** range widens to
+admit TypeScript 7.x. It prints a proposed `db.json` patch plus a diff against
+the committed values — and **writes nothing**; entries are applied by hand after
+checking the release notes.
+
+The bounded-range rule is the whole point: an *unbounded* peer range is never
+evidence of support. Measured 2026-07-29, 7 of the 25 covered packages declare
+ranges that trivially admit `7.0.2` while being known-broken (`ts-loader` `*`,
+`ts-node` `>=2.7`, `tsup` `>=4.5.0` — our own db entry documents tsup crashing
+on 7.0 — `@rollup/plugin-typescript`, `rollup-plugin-typescript2`,
+`fork-ts-checker-webpack-plugin`, `vue-tsc`). Those report
+**`unknown — manual check`**, never `supported`. 404s, network failures and
+missing peer ranges also report `unknown` instead of crashing.
+
+`db --check` never runs during a normal scan or inside the Action. If the
+bundled ledger's `generatedAt` is older than 60 days, a scan prints a
+non-failing staleness note suggesting a refresh.
 
 ## The tsconfig checks
 
@@ -141,7 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: Booyaka101/ts7-compat-guard@v2
+      - uses: Booyaka101/ts7-compat-guard@v3
         with:
           package-dir: .     # default: .
           mode: fail         # default: fail  ("warn" to annotate without failing)
@@ -150,7 +259,8 @@ jobs:
 ```
 
 **Inputs:** `package-dir`, `mode`, `recursive`, `ignore`, `sarif-file`, `config`.
-**Outputs:** `ts7`, `conflict-count`, `tsconfig-count`, `advisory-count`, `status`, `json`.
+**Outputs:** `ts7`, `conflict-count`, `tsconfig-count`, `advisory-count`,
+`notice-count`, `shim-detected`, `status`, `json`.
 
 Conflicts surface as GitHub **error annotations** — tsconfig ones point at the exact
 `tsconfig.json` line — with warnings when you're still on TS 6 and non-failing notices
@@ -160,25 +270,53 @@ for advisories, plus a job-summary line.
 
 1. Read `package.json`; resolve the **effective** `typescript` version — a top-level
    `overrides` / `resolutions` / `pnpm.overrides` pin wins over a declared dependency
-   — and flag TS7 when its floor is `>= 7.0.0`.
-2. Cross-reference every other dependency against the curated database (`src/db.json`).
-3. Read `tsconfig.json` (JSONC + relative `extends`); flag removed options and derive
-   advisories.
-4. **conflict** = on TS7 with a Compiler-API dep or a removed option → fails `--mode fail`.
-   **warning** = same finding while still on TS6 (plan-ahead). **advisory** = behavioural.
+   — and flag TS7 when its floor is `>= 7.0.0`. `npm:` alias **targets** are resolved
+   too: any dependency aliased to `npm:typescript@^7` means TS7 *is* installed, and
+   `typescript` aliased to `npm:@typescript/typescript6@…` means the API half is 6.x.
+2. Cross-reference every other dependency against the readiness ledger (`src/db.json`).
+   For each match, resolve the **effective version**: the installed
+   `node_modules/<pkg>/package.json` version when present (per package dir, falling
+   back to the repo root in monorepos), else the minimum of the declared range.
+3. If that version satisfies the entry's `ts7Ready` range → **notice** (never fails).
+   If `ts7Status` is `"partial"` → **warning** with the source URL. Otherwise the
+   classic rule: **conflict** on TS7 (downgraded to **warning** when the TS6 shim is
+   present), **warning** on TS6.
+4. Read `tsconfig.json` (JSONC + relative `extends`); flag removed options and derive
+   advisories. Removed options are never downgraded by the shim.
 
 Non-semver `typescript` specs (`latest`, `*`, git/file URLs) are treated conservatively
-as *not* TS7 to avoid false alarms.
+as *not* TS7 to avoid false alarms. Prerelease installed versions are compared with
+`includePrerelease`. Empty or malformed installed manifests fall back to the declared
+range.
 
 ## Covered dependencies
 
-`@vue/language-tools`, `volar`, `@volar/typescript`, `vue-tsc`, `@astrojs/language-server`,
-`@astrojs/check`, `svelte-language-server`, `svelte-check`, `@angular/compiler-cli`,
-`@mdx-js/mdx`, `ts-node`, `ts-morph`, `typescript-eslint`, `@typescript-eslint/parser`,
-`@typescript-eslint/typescript-estree`, `ts-loader`, `fork-ts-checker-webpack-plugin`,
-`rollup-plugin-typescript2`, `@rollup/plugin-typescript`, `ts-jest`,
-`@microsoft/api-extractor`, `typedoc`, `dts-bundle-generator`, `tsd`. Extend via
-`src/db.json`, `--db`, or `.ts7guardrc.json`.
+25 packages, each entry carrying `reason`, `fix`, `ts7Status`
+(`none` | `partial` | `supported`), an optional `ts7Ready` range, a `source` URL
+and a `checkedAt` date. **As of 2026-07-29 not one of them ships a bounded
+typescript peer range that admits 7.x** (typescript-eslint 8.65.0 added a
+"TS 7 detected" *warning* while staying pinned `>=4.8.4 <6.1.0`), so every entry
+truthfully reads `ts7Status: "none"` — no invented version numbers. When the
+ecosystem catches up, `db --check` proposes the exact release, and repos on that
+release start seeing green notices instead of conflicts.
+
+| Package | TS7 status (checked 2026-07-29) |
+|---------|--------------------------------|
+| `@vue/language-tools`, `volar`, `@volar/typescript`, `vue-tsc` | none |
+| `@astrojs/language-server`, `@astrojs/check` | none |
+| `svelte-language-server`, `svelte-check` | none |
+| `@angular/compiler-cli` | none |
+| `@mdx-js/mdx` | none |
+| `ts-node`, `ts-morph` | none |
+| `typescript-eslint`, `@typescript-eslint/parser`, `@typescript-eslint/typescript-estree` | none (8.65.0 warns on TS7; peer range still excludes it) |
+| `ts-loader`, `fork-ts-checker-webpack-plugin` | none |
+| `rollup-plugin-typescript2`, `@rollup/plugin-typescript` | none |
+| `ts-jest` | none |
+| `@microsoft/api-extractor`, `typedoc`, `dts-bundle-generator`, `tsd` | none |
+| `tsup` | none (declaration step crashes on 7.0) |
+
+Extend via `src/db.json`, `--db`, or `.ts7guardrc.json` — custom entries may
+carry the same `ts7Ready` / `ts7Status` / `source` / `checkedAt` fields.
 
 ## Config file (`.ts7guardrc.json`)
 
@@ -195,7 +333,7 @@ as *not* TS7 to avoid false alarms.
 ```bash
 npm install
 npm run build    # bundle src/action.js -> dist/action.js (esbuild; inlines semver + db.json)
-npm test         # 114 checks: core, tsconfig engine, report, SARIF, CLI (in-process + spawned), Action, bundled dist
+npm test         # 151 checks: core, tsconfig engine, readiness/shim/alias, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
 ```
 
 The Action runs from the committed self-contained bundle `dist/action.js`, so

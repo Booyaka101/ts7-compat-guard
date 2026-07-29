@@ -46,8 +46,12 @@ outputs:
     description: Number of removed/changed tsconfig.json options found.
   advisory-count:
     description: Number of behavioural advisories (non-failing).
+  notice-count:
+    description: Number of TS7-ready notices (dependencies whose installed/declared version already supports TypeScript 7; non-failing).
+  shim-detected:
+    description: '"true" when the @typescript/typescript6 TS6 API shim is present (plain dependency or npm: alias layout).'
   status:
-    description: One of "conflict", "warning", "advisory", or "clean".
+    description: One of "conflict", "warning", "advisory", "notice", or "clean".
   json:
     description: Full JSON report as a string.
 runs:

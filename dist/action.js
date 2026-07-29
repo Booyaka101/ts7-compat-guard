@@ -2006,105 +2006,183 @@ var require_semver2 = __commonJS({
 var require_db = __commonJS({
   "src/db.json"(exports2, module2) {
     module2.exports = {
-      "@vue/language-tools": {
-        reason: "Uses TypeScript Compiler API programmatic layer, absent in TypeScript 7.0 until 7.1",
-        fix: "Pin typescript to ^6.x, or install @typescript/typescript6 and configure alias"
-      },
-      volar: {
-        reason: "Same as @vue/language-tools (predecessor package)",
-        fix: "Pin typescript to ^6.x"
-      },
-      "@volar/typescript": {
-        reason: "Uses TypeScript Compiler API",
-        fix: "Pin typescript to ^6.x"
-      },
-      "@astrojs/language-server": {
-        reason: "Uses TypeScript Compiler API for Astro template type-checking",
-        fix: "Pin typescript to ^6.x"
-      },
-      "svelte-language-server": {
-        reason: "Uses TypeScript Compiler API for Svelte template type-checking",
-        fix: "Pin typescript to ^6.x"
-      },
-      "@angular/compiler-cli": {
-        reason: "Uses TypeScript Compiler API for Angular template type-checking",
-        fix: "Pin typescript to ^6.x"
-      },
-      "ts-node": {
-        reason: "Wraps TypeScript Compiler API for runtime transpilation",
-        fix: "Use tsx or swc-node as replacements, or pin typescript to ^6.x"
-      },
-      "ts-morph": {
-        reason: "Built entirely on the TypeScript Compiler API",
-        fix: "Wait for ts-morph TypeScript 7.1 support or pin typescript to ^6.x"
-      },
-      "@mdx-js/mdx": {
-        reason: "MDX type-checking embeds the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
-        fix: "Pin typescript to ^6.x"
-      },
-      "typescript-eslint": {
-        reason: "typescript-eslint reads types via the TypeScript Compiler API, which TypeScript 7.0 does not export until 7.1",
-        fix: "Run typescript-eslint against @typescript/typescript6 side-by-side, or pin typescript to ^6.x"
-      },
-      "@typescript-eslint/typescript-estree": {
-        reason: "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
-        fix: "Install @typescript/typescript6 side-by-side, or pin typescript to ^6.x"
-      },
-      "vue-tsc": {
-        reason: "Wraps the TypeScript Compiler API (via Volar) to type-check Vue SFC templates",
-        fix: "Pin typescript to ^6.x, or install @typescript/typescript6 and run tsc6"
-      },
-      "svelte-check": {
-        reason: "Uses the TypeScript Compiler API (via svelte-language-server) to type-check Svelte templates",
-        fix: "Pin typescript to ^6.x"
-      },
-      "@astrojs/check": {
-        reason: "Astro's type-check CLI drives the TypeScript Compiler API (via @astrojs/language-server)",
-        fix: "Pin typescript to ^6.x"
-      },
-      "@typescript-eslint/parser": {
-        reason: "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
-        fix: "Run against @typescript/typescript6 side-by-side, or pin typescript to ^6.x"
-      },
-      "ts-loader": {
-        reason: "webpack loader that calls the TypeScript Compiler API (createProgram / transpileModule) to compile and type-check",
-        fix: "Switch to esbuild-loader or swc-loader, or pin typescript to ^6.x"
-      },
-      "fork-ts-checker-webpack-plugin": {
-        reason: "Runs a full TypeScript type-check via the Compiler API in a worker process",
-        fix: "Pin typescript to ^6.x until the plugin targets the TypeScript 7.1 API"
-      },
-      "rollup-plugin-typescript2": {
-        reason: "Rollup plugin built on the TypeScript Compiler API (language service) for compile + type-check",
-        fix: "Use @rollup/plugin-typescript in transpile-only mode with esbuild/swc, or pin typescript to ^6.x"
-      },
-      "@rollup/plugin-typescript": {
-        reason: "Invokes the TypeScript Compiler API to emit and type-check during Rollup builds",
-        fix: "Switch emit to esbuild/swc and type-check separately, or pin typescript to ^6.x"
-      },
-      "ts-jest": {
-        reason: "Compiles and type-checks test files through the TypeScript Compiler API",
-        fix: "Use @swc/jest or babel-jest for transform, or pin typescript to ^6.x"
-      },
-      "@microsoft/api-extractor": {
-        reason: "Analyzes .d.ts rollups via the TypeScript Compiler API",
-        fix: "Pin typescript to ^6.x until api-extractor supports the TypeScript 7.1 API"
-      },
-      typedoc: {
-        reason: "Reads program symbols and types via the TypeScript Compiler API to generate docs",
-        fix: "Pin typescript to ^6.x until TypeDoc supports the TypeScript 7.1 API"
-      },
-      "dts-bundle-generator": {
-        reason: "Builds bundled type declarations via the TypeScript Compiler API",
-        fix: "Pin typescript to ^6.x"
-      },
-      tsd: {
-        reason: "Runs type assertions by driving the TypeScript Compiler API",
-        fix: "Pin typescript to ^6.x"
-      },
-      tsup: {
-        reason: 'Generates .d.ts through the TypeScript Compiler API; its declaration step crashes on 7.0 with "Cannot read properties of undefined (reading useCaseSensitiveFileNames)"',
-        fix: "Build with `--dts false` and emit declarations via tsc, or pin typescript to ^6.x until tsup supports the native compiler"
+      generatedAt: "2026-07-29",
+      packages: {
+        "@vue/language-tools": {
+          reason: "Uses TypeScript Compiler API programmatic layer, absent in TypeScript 7.0 until 7.1",
+          fix: "Pin typescript to ^6.x, or install @typescript/typescript6 and configure alias",
+          ts7Status: "none",
+          source: "https://github.com/vuejs/language-tools/releases",
+          checkedAt: "2026-07-29"
+        },
+        volar: {
+          reason: "Same as @vue/language-tools (predecessor package)",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://www.npmjs.com/package/volar",
+          checkedAt: "2026-07-29"
+        },
+        "@volar/typescript": {
+          reason: "Uses TypeScript Compiler API",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/volarjs/volar.js/releases",
+          checkedAt: "2026-07-29"
+        },
+        "@astrojs/language-server": {
+          reason: "Uses TypeScript Compiler API for Astro template type-checking",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/withastro/language-tools/releases",
+          checkedAt: "2026-07-29"
+        },
+        "svelte-language-server": {
+          reason: "Uses TypeScript Compiler API for Svelte template type-checking",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/sveltejs/language-tools/releases",
+          checkedAt: "2026-07-29"
+        },
+        "@angular/compiler-cli": {
+          reason: "Uses TypeScript Compiler API for Angular template type-checking",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/angular/angular/releases",
+          checkedAt: "2026-07-29"
+        },
+        "ts-node": {
+          reason: "Wraps TypeScript Compiler API for runtime transpilation",
+          fix: "Use tsx or swc-node as replacements, or pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/TypeStrong/ts-node/releases",
+          checkedAt: "2026-07-29"
+        },
+        "ts-morph": {
+          reason: "Built entirely on the TypeScript Compiler API",
+          fix: "Wait for ts-morph TypeScript 7.1 support or pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/dsherret/ts-morph/releases",
+          checkedAt: "2026-07-29"
+        },
+        "@mdx-js/mdx": {
+          reason: "MDX type-checking embeds the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/mdx-js/mdx/releases",
+          checkedAt: "2026-07-29"
+        },
+        "typescript-eslint": {
+          reason: "typescript-eslint reads types via the TypeScript Compiler API, which TypeScript 7.0 does not export until 7.1. v8.65.0 (2026-07-20) added a warning when TS 7 is detected, but its typescript peer range is still >=4.8.4 <6.1.0",
+          fix: "Run typescript-eslint against @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/typescript-eslint/typescript-eslint/releases",
+          checkedAt: "2026-07-29"
+        },
+        "@typescript-eslint/typescript-estree": {
+          reason: "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
+          fix: "Install @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/typescript-eslint/typescript-eslint/releases",
+          checkedAt: "2026-07-29"
+        },
+        "vue-tsc": {
+          reason: "Wraps the TypeScript Compiler API (via Volar) to type-check Vue SFC templates",
+          fix: "Pin typescript to ^6.x, or install @typescript/typescript6 and run tsc6",
+          ts7Status: "none",
+          source: "https://github.com/vuejs/language-tools/releases",
+          checkedAt: "2026-07-29"
+        },
+        "svelte-check": {
+          reason: "Uses the TypeScript Compiler API (via svelte-language-server) to type-check Svelte templates",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/sveltejs/language-tools/releases",
+          checkedAt: "2026-07-29"
+        },
+        "@astrojs/check": {
+          reason: "Astro's type-check CLI drives the TypeScript Compiler API (via @astrojs/language-server)",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/withastro/language-tools/releases",
+          checkedAt: "2026-07-29"
+        },
+        "@typescript-eslint/parser": {
+          reason: "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
+          fix: "Run against @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/typescript-eslint/typescript-eslint/releases",
+          checkedAt: "2026-07-29"
+        },
+        "ts-loader": {
+          reason: "webpack loader that calls the TypeScript Compiler API (createProgram / transpileModule) to compile and type-check",
+          fix: "Switch to esbuild-loader or swc-loader, or pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/TypeStrong/ts-loader/releases",
+          checkedAt: "2026-07-29"
+        },
+        "fork-ts-checker-webpack-plugin": {
+          reason: "Runs a full TypeScript type-check via the Compiler API in a worker process",
+          fix: "Pin typescript to ^6.x until the plugin targets the TypeScript 7.1 API",
+          ts7Status: "none",
+          source: "https://github.com/TypeStrong/fork-ts-checker-webpack-plugin/releases",
+          checkedAt: "2026-07-29"
+        },
+        "rollup-plugin-typescript2": {
+          reason: "Rollup plugin built on the TypeScript Compiler API (language service) for compile + type-check",
+          fix: "Use @rollup/plugin-typescript in transpile-only mode with esbuild/swc, or pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/ezolenko/rollup-plugin-typescript2/releases",
+          checkedAt: "2026-07-29"
+        },
+        "@rollup/plugin-typescript": {
+          reason: "Invokes the TypeScript Compiler API to emit and type-check during Rollup builds",
+          fix: "Switch emit to esbuild/swc and type-check separately, or pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/rollup/plugins/releases",
+          checkedAt: "2026-07-29"
+        },
+        "ts-jest": {
+          reason: "Compiles and type-checks test files through the TypeScript Compiler API",
+          fix: "Use @swc/jest or babel-jest for transform, or pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/kulshekhar/ts-jest/releases",
+          checkedAt: "2026-07-29"
+        },
+        "@microsoft/api-extractor": {
+          reason: "Analyzes .d.ts rollups via the TypeScript Compiler API",
+          fix: "Pin typescript to ^6.x until api-extractor supports the TypeScript 7.1 API",
+          ts7Status: "none",
+          source: "https://github.com/microsoft/rushstack/releases",
+          checkedAt: "2026-07-29"
+        },
+        typedoc: {
+          reason: "Reads program symbols and types via the TypeScript Compiler API to generate docs",
+          fix: "Pin typescript to ^6.x until TypeDoc supports the TypeScript 7.1 API",
+          ts7Status: "none",
+          source: "https://github.com/TypeStrong/typedoc/releases",
+          checkedAt: "2026-07-29"
+        },
+        "dts-bundle-generator": {
+          reason: "Builds bundled type declarations via the TypeScript Compiler API",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/timocov/dts-bundle-generator/releases",
+          checkedAt: "2026-07-29"
+        },
+        tsd: {
+          reason: "Runs type assertions by driving the TypeScript Compiler API",
+          fix: "Pin typescript to ^6.x",
+          ts7Status: "none",
+          source: "https://github.com/tsdjs/tsd/releases",
+          checkedAt: "2026-07-29"
+        },
+        tsup: {
+          reason: 'Generates .d.ts through the TypeScript Compiler API; its declaration step crashes on 7.0 with "Cannot read properties of undefined (reading useCaseSensitiveFileNames)"',
+          fix: "Build with `--dts false` and emit declarations via tsc, or pin typescript to ^6.x until tsup supports the native compiler",
+          ts7Status: "none",
+          source: "https://github.com/egoist/tsup/releases",
+          checkedAt: "2026-07-29"
+        }
       }
     };
   }
@@ -2603,8 +2681,18 @@ var require_core = __commonJS({
     var fs2 = require("node:fs");
     var path2 = require("node:path");
     var semver = require_semver2();
-    var builtinDb = require_db();
+    var dbDoc = require_db();
     var tsconfig = require_tsconfig();
+    function normalizeDb(doc) {
+      if (doc && typeof doc === "object" && doc.packages && typeof doc.packages === "object") {
+        return { packages: doc.packages, generatedAt: doc.generatedAt || null };
+      }
+      return { packages: doc || {}, generatedAt: null };
+    }
+    var builtinDb = dbDoc.packages;
+    var SHIM_PACKAGE = "@typescript/typescript6";
+    var SHIM_HELP_URI = "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/";
+    var STALE_DB_DAYS = 60;
     var DEP_FIELDS = [
       "dependencies",
       "devDependencies",
@@ -2614,11 +2702,18 @@ var require_core = __commonJS({
     function analyzeTypescriptVersion(raw) {
       if (raw == null) return { ts7: false, resolved: null, raw: null, satisfiable: false };
       let spec = String(raw).trim();
-      const npmAlias = spec.match(/^npm:(?:@?[^@]+)@(.+)$/);
-      if (npmAlias) spec = npmAlias[1].trim();
+      let aliasTarget = null;
+      const npmAlias = spec.match(/^npm:(@?[^@]+)@(.+)$/);
+      if (npmAlias) {
+        aliasTarget = npmAlias[1].trim();
+        spec = npmAlias[2].trim();
+      } else if (spec.startsWith("npm:")) {
+        aliasTarget = spec.slice(4).trim();
+        spec = "";
+      }
       spec = spec.replace(/^workspace:/, "").trim();
       if (spec === "" || spec === "*") {
-        return { ts7: false, resolved: null, raw: String(raw), satisfiable: false };
+        return { ts7: false, resolved: null, raw: String(raw), satisfiable: false, aliasTarget };
       }
       let min = null;
       try {
@@ -2631,11 +2726,58 @@ var require_core = __commonJS({
         if (coerced) min = coerced;
       }
       if (!min) {
-        return { ts7: false, resolved: null, raw: String(raw), satisfiable: false };
+        return { ts7: false, resolved: null, raw: String(raw), satisfiable: false, aliasTarget };
       }
       const resolved = min.version;
-      const ts7 = semver.satisfies(resolved, ">=7.0.0", { includePrerelease: true }) || min.major >= 7;
-      return { ts7, resolved, raw: String(raw), satisfiable: true };
+      const ts7 = (semver.satisfies(resolved, ">=7.0.0", { includePrerelease: true }) || min.major >= 7) && // Aliased to a package that is not `typescript` (e.g. the TS6 shim) — the
+      // range describes THAT package's versions, never TypeScript 7.
+      (aliasTarget == null || aliasTarget === "typescript");
+      return { ts7, resolved, raw: String(raw), satisfiable: true, aliasTarget };
+    }
+    function detectShim(deps) {
+      for (const [key, value] of Object.entries(deps || {})) {
+        if (key === SHIM_PACKAGE) {
+          return { present: true, layout: "dependency", key, range: String(value) };
+        }
+        const m = String(value).match(/^npm:@typescript\/typescript6(?:@(.+))?$/);
+        if (m) {
+          return { present: true, layout: "alias", key, range: m[1] || null };
+        }
+      }
+      return { present: false, layout: null, key: null, range: null };
+    }
+    function detectTs7Alias(deps) {
+      for (const [key, value] of Object.entries(deps || {})) {
+        if (key === "typescript") continue;
+        const info = analyzeTypescriptVersion(value);
+        if (info.aliasTarget === "typescript" && info.ts7) {
+          return { key, raw: String(value), resolved: info.resolved };
+        }
+      }
+      return null;
+    }
+    function resolveEffectiveVersion(name, declaredSpec, dirs) {
+      for (const dir of dirs || []) {
+        if (!dir) continue;
+        const p = path2.join(dir, "node_modules", ...name.split("/"), "package.json");
+        try {
+          const v = JSON.parse(fs2.readFileSync(p, "utf8")).version;
+          if (typeof v === "string" && semver.valid(v)) {
+            return { version: v, source: "node_modules" };
+          }
+        } catch (_) {
+        }
+      }
+      let spec = String(declaredSpec == null ? "" : declaredSpec).trim();
+      const alias = spec.match(/^npm:@?[^@]+@(.+)$/);
+      if (alias) spec = alias[1].trim();
+      spec = spec.replace(/^workspace:/, "").trim();
+      try {
+        const min = semver.minVersion(spec);
+        if (min) return { version: min.version, source: "declared" };
+      } catch (_) {
+      }
+      return { version: null, source: null };
     }
     function readOverrideTypescript(pkg) {
       const sources = [
@@ -2712,31 +2854,95 @@ var require_core = __commonJS({
       return cfg;
     }
     function analyze(pkg, opts = {}) {
-      const database = opts.extraDb ? Object.assign({}, opts.db || builtinDb, opts.extraDb) : opts.db || builtinDb;
+      const base = normalizeDb(opts.db || dbDoc);
+      const database = opts.extraDb ? Object.assign({}, base.packages, opts.extraDb) : base.packages;
       const ignore = new Set(opts.ignore || []);
       const deps = mergeDeps(pkg);
       const tsSpec = getTypescriptSpec(pkg);
       const tsInfo = analyzeTypescriptVersion(tsSpec.raw);
+      const shim = detectShim(deps);
+      const ts7Alias = detectTs7Alias(deps);
+      const tsIsShimAlias = tsInfo.aliasTarget === SHIM_PACKAGE;
+      const ts7 = tsInfo.ts7 || !!ts7Alias;
+      const nmDirs = opts.nodeModulesDirs || [];
       const conflicts = [];
+      const notices = [];
       const ignored = [];
       for (const key of Object.keys(deps)) {
         if (key === "typescript") continue;
+        if (key === SHIM_PACKAGE) continue;
+        if (ts7Alias && key === ts7Alias.key) continue;
         if (!Object.prototype.hasOwnProperty.call(database, key)) continue;
-        const entry = { pkg: key, version: String(deps[key]), reason: database[key].reason, fix: database[key].fix };
-        if (ignore.has(key)) ignored.push(entry);
-        else conflicts.push(entry);
+        const dbe = database[key];
+        const eff = resolveEffectiveVersion(key, deps[key], nmDirs);
+        const entry = {
+          pkg: key,
+          version: String(deps[key]),
+          effectiveVersion: eff.version,
+          effectiveSource: eff.source,
+          reason: dbe.reason,
+          fix: dbe.fix
+        };
+        if (ignore.has(key)) {
+          ignored.push(entry);
+          continue;
+        }
+        if (dbe.ts7Ready && eff.version && semver.satisfies(eff.version, dbe.ts7Ready, { includePrerelease: true })) {
+          let since = null;
+          try {
+            const m = semver.minVersion(dbe.ts7Ready);
+            since = m ? m.version : null;
+          } catch (_) {
+          }
+          notices.push(
+            Object.assign({}, entry, {
+              severity: "notice",
+              ts7Ready: dbe.ts7Ready,
+              readySince: since,
+              source: dbe.source || null,
+              checkedAt: dbe.checkedAt || null
+            })
+          );
+          continue;
+        }
+        if (dbe.ts7Status === "partial") {
+          entry.severity = "warning";
+          entry.partial = true;
+          entry.source = dbe.source || null;
+        } else if (!ts7) {
+          entry.severity = "warning";
+        } else if (shim.present || tsIsShimAlias) {
+          entry.severity = "warning";
+          entry.downgradedByShim = true;
+        } else {
+          entry.severity = "conflict";
+        }
+        conflicts.push(entry);
       }
       conflicts.sort((a, b) => a.pkg.localeCompare(b.pkg));
+      notices.sort((a, b) => a.pkg.localeCompare(b.pkg));
       ignored.sort((a, b) => a.pkg.localeCompare(b.pkg));
       const result = {
-        ts7: tsInfo.ts7,
+        ts7,
         typescript: {
           raw: tsInfo.raw,
           resolved: tsInfo.resolved,
           satisfiable: tsInfo.satisfiable,
-          source: tsSpec.source
+          source: tsSpec.source,
+          aliasTarget: tsInfo.aliasTarget || null,
+          shimAlias: tsIsShimAlias,
+          ts7Alias: ts7Alias ? { key: ts7Alias.key, raw: ts7Alias.raw, resolved: ts7Alias.resolved } : null
         },
+        shim: shim.present || tsIsShimAlias ? {
+          present: true,
+          layout: shim.present ? shim.layout : "alias",
+          key: shim.present ? shim.key : "typescript",
+          range: shim.present ? shim.range : tsInfo.resolved,
+          helpUri: SHIM_HELP_URI
+        } : { present: false, layout: null, key: null, range: null, helpUri: SHIM_HELP_URI },
+        dbStale: dbStaleness(base.generatedAt, opts.now),
         conflicts,
+        notices,
         ignored,
         name: pkg.name,
         tsconfig: { present: false, path: null, absPath: null, findings: [], parseError: null, unresolvedExtends: [] },
@@ -2744,19 +2950,30 @@ var require_core = __commonJS({
       };
       return finalize(result);
     }
+    function dbStaleness(generatedAt, now) {
+      if (!generatedAt) return { stale: false, generatedAt: null, days: null };
+      const t = Date.parse(generatedAt);
+      if (Number.isNaN(t)) return { stale: false, generatedAt, days: null };
+      const days = Math.floor(((now == null ? Date.now() : now) - t) / 864e5);
+      return { stale: days > STALE_DB_DAYS, generatedAt, days };
+    }
     function finalize(result) {
       const tsFindings = result.tsconfig && result.tsconfig.findings || [];
-      const activeDep = result.ts7 ? result.conflicts.length : 0;
+      const sev = (c) => c.severity || (result.ts7 ? "conflict" : "warning");
+      const activeDep = result.conflicts.filter((c) => sev(c) === "conflict").length;
       const activeTsconfig = tsFindings.filter((f) => f.severity === "conflict").length;
       result.activeConflictCount = activeDep + activeTsconfig;
       result.hasActiveConflict = result.activeConflictCount > 0;
-      result.warningCount = (result.ts7 ? 0 : result.conflicts.length) + tsFindings.filter((f) => f.severity === "warning").length;
+      result.warningCount = result.conflicts.filter((c) => sev(c) === "warning").length + tsFindings.filter((f) => f.severity === "warning").length;
+      result.noticeCount = (result.notices || []).length;
       result.advisoryCount = (result.risks || []).length;
       return result;
     }
     function analyzeDir(dir, opts = {}) {
       const { pkg, pkgPath } = readPackageJson(dir);
-      const result = analyze(pkg, opts);
+      const nmDirs = [dir];
+      if (opts.root && path2.resolve(opts.root) !== path2.resolve(dir)) nmDirs.push(opts.root);
+      const result = analyze(pkg, Object.assign({ nodeModulesDirs: nmDirs }, opts));
       result.pkgPath = pkgPath;
       result.dir = dir;
       if (opts.tsconfig !== false) {
@@ -2832,6 +3049,8 @@ var require_core = __commonJS({
         totalConflicts: results.reduce((n, r) => n + (r.conflicts ? r.conflicts.length : 0), 0),
         totalTsconfigFindings: results.reduce((n, r) => n + tsFindings(r).length, 0),
         totalAdvisories: results.reduce((n, r) => n + (r.risks && r.risks.length || 0), 0),
+        totalNotices: results.reduce((n, r) => n + (r.notices && r.notices.length || 0), 0),
+        shimDetected: results.some((r) => r.shim && r.shim.present),
         errors: results.filter((r) => r.error).length
       };
       return { results, summary };
@@ -2847,12 +3066,20 @@ var require_core = __commonJS({
     module2.exports = {
       db: builtinDb,
       builtinDb,
+      dbDoc,
+      normalizeDb,
+      dbStaleness,
+      SHIM_PACKAGE,
+      STALE_DB_DAYS,
       tsconfig,
       analyze,
       analyzeDir,
       analyzeMany,
       finalize,
       analyzeTypescriptVersion,
+      detectShim,
+      detectTs7Alias,
+      resolveEffectiveVersion,
       getTypescriptSpec,
       readOverrideTypescript,
       readPackageJson,
@@ -2875,7 +3102,18 @@ var require_report = __commonJS({
       if (result.hasActiveConflict) return "conflict";
       if (result.warningCount > 0) return "warning";
       if (result.advisoryCount > 0) return "advisory";
+      if (result.noticeCount > 0) return "notice";
       return "clean";
+    }
+    function depSeverity(conf, result) {
+      return conf.severity || (result.ts7 ? "conflict" : "warning");
+    }
+    function noticeText(n) {
+      const meta = [];
+      if (n.source) meta.push(`source: ${n.source}`);
+      if (n.checkedAt) meta.push(`checked ${n.checkedAt}`);
+      const suffix = meta.length ? ` (${meta.join(", ")})` : "";
+      return `NOTICE: ${n.pkg} ${n.effectiveVersion} \u2014 TS7 supported since ${n.readySince || n.ts7Ready}${suffix}`;
     }
     function humanReport2(result, opts = {}) {
       const c = makeColors(!!opts.color);
@@ -2883,35 +3121,69 @@ var require_report = __commonJS({
       lines.push(c.bold(TITLE));
       const tsRaw = result.typescript.raw;
       const srcNote = result.typescript.source && result.typescript.source !== "dependencies" ? c.dim(` (via ${result.typescript.source})`) : "";
-      if (tsRaw == null) {
+      const ts = result.typescript || {};
+      if (ts.shimAlias) {
+        lines.push(
+          "  " + c.green(`typescript ${tsRaw} \u2192 TS6 API shim (@typescript/typescript6)`) + c.dim(" \u2014 Compiler-API consumers resolve the TypeScript 6 API") + srcNote
+        );
+      } else if (tsRaw == null) {
         lines.push(c.dim("  typescript: not a direct dependency"));
       } else if (result.ts7) {
         lines.push("  " + c.red(`typescript ${tsRaw} \u2192 TypeScript 7.0 detected`) + srcNote);
       } else {
         lines.push("  " + c.green(`typescript ${tsRaw} \u2192 TypeScript 6.x (pre-7.0)`) + srcNote);
       }
+      if (ts.ts7Alias) {
+        lines.push(
+          "  " + c.red(`TypeScript 7.0 detected via "${ts.ts7Alias.key}": ${ts.ts7Alias.raw}`)
+        );
+      }
+      if (result.shim && result.shim.present) {
+        lines.push(
+          "  " + c.green(
+            `\u2713 TS6 API shim present (@typescript/typescript6${result.shim.layout === "alias" ? ", aliased" : ""}) \u2014 Compiler-API conflicts downgraded to warnings`
+          )
+        );
+        lines.push("    " + c.dim(`see ${result.shim.helpUri}`));
+      }
       const tsFindings = result.tsconfig && result.tsconfig.findings || [];
       const risks = result.risks || [];
-      const nothing = result.conflicts.length === 0 && tsFindings.length === 0 && risks.length === 0;
+      const notices = result.notices || [];
+      const nothing = result.conflicts.length === 0 && tsFindings.length === 0 && risks.length === 0 && notices.length === 0;
       if (result.tsconfig && result.tsconfig.parseError) {
         lines.push("  " + c.yellow(`tsconfig.json: could not parse (${result.tsconfig.parseError})`));
       }
       if (nothing) {
         lines.push("");
         lines.push(c.green("  \u2713 No TypeScript 7.0 / tsgo readiness issues found."));
+        appendStaleDb(lines, result, c);
         appendIgnored(lines, result, c);
         return lines;
       }
-      if (result.conflicts.length > 0) {
+      if (result.conflicts.length > 0 || notices.length > 0) {
         lines.push("");
         lines.push(c.bold("  [dependencies]"));
-        if (result.ts7) {
-          for (const conf of result.conflicts) {
+        for (const conf of result.conflicts) {
+          const sev = depSeverity(conf, result);
+          if (sev === "conflict") {
             lines.push("  " + c.red(`CONFLICT: ${conf.pkg} \u2014 ${conf.reason}`));
             lines.push("    " + c.yellow(`Fix: ${conf.fix}`));
-          }
-        } else {
-          for (const conf of result.conflicts) {
+          } else if (conf.downgradedByShim) {
+            lines.push(
+              "  " + c.yellow(
+                `WARNING: ${conf.pkg} \u2014 ${conf.reason} (downgraded: TS6 API shim present)`
+              )
+            );
+            lines.push("    " + c.dim(`Fix: ${conf.fix}`));
+          } else if (conf.partial) {
+            lines.push(
+              "  " + c.yellow(
+                `WARNING: ${conf.pkg}${conf.effectiveVersion ? " " + conf.effectiveVersion : ""} \u2014 partial TypeScript 7 support${conf.source ? ` (source: ${conf.source})` : ""}`
+              )
+            );
+            lines.push("    " + c.dim(`Reason: ${conf.reason}`));
+            lines.push("    " + c.dim(`Fix: ${conf.fix}`));
+          } else {
             lines.push(
               "  " + c.yellow(
                 `WARNING: ${conf.pkg} will break when typescript is upgraded to ^7 \u2014 plan migration now.`
@@ -2920,6 +3192,9 @@ var require_report = __commonJS({
             lines.push("    " + c.dim(`Reason: ${conf.reason}`));
             lines.push("    " + c.dim(`Fix: ${conf.fix}`));
           }
+        }
+        for (const n of notices) {
+          lines.push("  " + c.green(noticeText(n)));
         }
       }
       if (tsFindings.length > 0) {
@@ -2950,19 +3225,39 @@ var require_report = __commonJS({
       const parts = [];
       if (result.activeConflictCount > 0) parts.push(`${result.activeConflictCount} conflict(s)`);
       if (result.warningCount > 0) parts.push(`${result.warningCount} warning(s)`);
+      if (result.noticeCount > 0) parts.push(`${result.noticeCount} notice(s)`);
       if (result.advisoryCount > 0) parts.push(`${result.advisoryCount} advisory(ies)`);
       const summary = `  ${parts.join(" \xB7 ")}`;
       if (result.hasActiveConflict) {
         lines.push(c.red(summary + " \u2014 type-checking/builds will break under TypeScript 7.0."));
+      } else if (result.warningCount > 0 && result.shim && result.shim.present) {
+        lines.push(
+          c.yellow(summary + " \u2014 the TS6 API shim keeps Compiler-API tools working; nothing is build-breaking.")
+        );
+      } else if (result.warningCount > 0 && result.ts7) {
+        lines.push(c.yellow(summary + " \u2014 nothing is build-breaking yet; review the warnings."));
       } else if (result.warningCount > 0) {
         lines.push(
           c.yellow(summary + " \u2014 you are on TypeScript 6.x today, so nothing is broken yet.")
         );
-      } else {
+      } else if (result.advisoryCount > 0) {
         lines.push(c.cyan(summary + " \u2014 no build-breaking issues; review advisories before upgrading."));
+      } else {
+        lines.push(c.green(summary + " \u2014 all flagged dependencies have TypeScript 7 support."));
       }
+      appendStaleDb(lines, result, c);
       appendIgnored(lines, result, c);
       return lines;
+    }
+    function appendStaleDb(lines, result, c) {
+      if (result.dbStale && result.dbStale.stale) {
+        lines.push("");
+        lines.push(
+          c.dim(
+            `  Note: readiness db generated ${result.dbStale.generatedAt} (${result.dbStale.days} days ago) \u2014 entries may be stale; refresh with \`ts7-compat-guard db --check\`.`
+          )
+        );
+      }
     }
     function appendIgnored(lines, result, c) {
       if (result.ignored && result.ignored.length > 0) {
@@ -2988,37 +3283,48 @@ var require_report = __commonJS({
         }
         const tsFindings = r.tsconfig && r.tsconfig.findings || [];
         const risks = r.risks || [];
+        const notices = r.notices || [];
+        const shimNote = r.shim && r.shim.present ? c.green("  [TS6 shim]") : "";
         if (r.hasActiveConflict) {
-          lines.push("  " + c.red(`\u25CF ${rel}`) + c.dim(`  (typescript ${r.typescript.raw})`));
-          if (r.ts7) {
-            for (const conf of r.conflicts) {
-              lines.push("      " + c.red(`CONFLICT: ${conf.pkg} \u2014 ${conf.reason}`));
-              lines.push("        " + c.yellow(`Fix: ${conf.fix}`));
-            }
+          lines.push("  " + c.red(`\u25CF ${rel}`) + c.dim(`  (typescript ${r.typescript.raw})`) + shimNote);
+          for (const conf of r.conflicts.filter((x) => depSeverity(x, r) === "conflict")) {
+            lines.push("      " + c.red(`CONFLICT: ${conf.pkg} \u2014 ${conf.reason}`));
+            lines.push("        " + c.yellow(`Fix: ${conf.fix}`));
           }
           for (const f of tsFindings.filter((x) => x.severity === "conflict")) {
             lines.push("      " + c.red(`CONFLICT: ${f.option} \u2014 ${f.title}`) + c.dim(` (${f.file}:${f.line})`));
             lines.push("        " + c.yellow(`Fix: ${f.fix}`));
           }
+          for (const n of notices) lines.push("      " + c.green(noticeText(n)));
         } else if (r.warningCount > 0) {
-          lines.push("  " + c.yellow(`\u25CB ${rel}`) + c.dim(`  (typescript ${r.typescript.raw || "n/a"})`));
+          lines.push("  " + c.yellow(`\u25CB ${rel}`) + c.dim(`  (typescript ${r.typescript.raw || "n/a"})`) + shimNote);
           for (const conf of r.conflicts) {
-            lines.push(
-              "      " + c.yellow(`WARNING: ${conf.pkg} will break when typescript is upgraded to ^7.`)
-            );
+            if (conf.downgradedByShim) {
+              lines.push("      " + c.yellow(`WARNING: ${conf.pkg} \u2014 ${conf.reason} (downgraded: TS6 API shim present)`));
+            } else if (conf.partial) {
+              lines.push("      " + c.yellow(`WARNING: ${conf.pkg} \u2014 partial TypeScript 7 support${conf.source ? ` (source: ${conf.source})` : ""}`));
+            } else {
+              lines.push(
+                "      " + c.yellow(`WARNING: ${conf.pkg} will break when typescript is upgraded to ^7.`)
+              );
+            }
           }
           for (const f of tsFindings.filter((x) => x.severity === "warning")) {
             lines.push("      " + c.yellow(`WARNING: ${f.option} \u2014 ${f.title} (breaks on upgrade).`));
           }
+          for (const n of notices) lines.push("      " + c.green(noticeText(n)));
         } else if (risks.length > 0) {
-          lines.push("  " + c.cyan(`\u25CD ${rel}`) + c.dim(`  (${risks.length} advisory(ies))`));
+          lines.push("  " + c.cyan(`\u25CD ${rel}`) + c.dim(`  (${risks.length} advisory(ies))`) + shimNote);
+        } else if (notices.length > 0) {
+          lines.push("  " + c.green(`\u2713 ${rel}`) + c.dim(`  (${notices.length} TS7-ready dep(s))`) + shimNote);
+          for (const n of notices) lines.push("      " + c.green(noticeText(n)));
         } else {
-          lines.push("  " + c.green(`\u2713 ${rel}`) + c.dim("  (clean)"));
+          lines.push("  " + c.green(`\u2713 ${rel}`) + c.dim("  (clean)") + shimNote);
         }
       }
       lines.push("");
       const s = agg.summary;
-      const summaryLine = `  ${s.packagesScanned} scanned \xB7 ${s.activeConflictPackages} with active conflicts \xB7 ${s.packagesWithConflicts - s.activeConflictPackages} with warnings \xB7 ${s.totalAdvisories} advisory(ies) \xB7 ${s.errors} error(s)`;
+      const summaryLine = `  ${s.packagesScanned} scanned \xB7 ${s.activeConflictPackages} with active conflicts \xB7 ${s.packagesWithConflicts - s.activeConflictPackages} with warnings \xB7 ${s.totalNotices || 0} notice(s) \xB7 ${s.totalAdvisories} advisory(ies) \xB7 ${s.errors} error(s)`;
       lines.push(s.activeConflictPackages > 0 ? c.red(summaryLine) : c.green(summaryLine));
       return lines;
     }
@@ -3029,16 +3335,33 @@ var require_report = __commonJS({
         tool: "ts7-compat-guard",
         ts7: result.ts7,
         typescript: result.typescript,
+        shim: result.shim || { present: false },
+        dbStale: result.dbStale || { stale: false, generatedAt: null, days: null },
         status: statusOf(result),
         conflictCount: result.activeConflictCount,
         warningCount: result.warningCount,
+        noticeCount: result.noticeCount || 0,
         advisoryCount: result.advisoryCount,
         conflicts: result.conflicts.map((conf) => ({
           pkg: conf.pkg,
           version: conf.version,
+          effectiveVersion: conf.effectiveVersion || null,
           reason: conf.reason,
           fix: conf.fix,
-          severity: result.ts7 ? "conflict" : "warning"
+          severity: depSeverity(conf, result),
+          downgradedByShim: !!conf.downgradedByShim,
+          partial: !!conf.partial,
+          source: conf.source || null
+        })),
+        notices: (result.notices || []).map((n) => ({
+          pkg: n.pkg,
+          version: n.version,
+          effectiveVersion: n.effectiveVersion,
+          ts7Ready: n.ts7Ready,
+          readySince: n.readySince,
+          source: n.source,
+          checkedAt: n.checkedAt,
+          severity: "notice"
         })),
         tsconfig: {
           present: !!(result.tsconfig && result.tsconfig.present),
@@ -3140,7 +3463,8 @@ var require_sarif = __commonJS({
         const pkgUri = toPosix(path2.relative(root, pkgPath)) || "package.json";
         for (const conf of r.conflicts || []) {
           const ruleId = `ts7-compat/dep/${conf.pkg}`;
-          const level = r.ts7 ? "error" : "warning";
+          const severity = conf.severity || (r.ts7 ? "conflict" : "warning");
+          const level = severity === "conflict" ? "error" : "warning";
           ensureRule({
             id: ruleId,
             name: `TS7Dep_${sanitize(conf.pkg)}`,
@@ -3151,14 +3475,46 @@ var require_sarif = __commonJS({
             defaultConfiguration: { level: "error" },
             properties: { tags: ["typescript", "typescript-7", "tsgo", "dependency"] }
           });
+          let text;
+          if (severity === "conflict") {
+            text = `CONFLICT: ${conf.pkg} \u2014 ${conf.reason} Fix: ${conf.fix}`;
+          } else if (conf.downgradedByShim) {
+            text = `WARNING: ${conf.pkg} \u2014 ${conf.reason} (downgraded: TS6 API shim present, see ${DEP_HELP}) Fix: ${conf.fix}`;
+          } else if (conf.partial) {
+            text = `WARNING: ${conf.pkg} \u2014 partial TypeScript 7 support${conf.source ? ` (source: ${conf.source})` : ""}. ${conf.reason} Fix: ${conf.fix}`;
+          } else {
+            text = `${conf.pkg} will break when typescript is upgraded to ^7 \u2014 plan migration now. Fix: ${conf.fix}`;
+          }
           sarifResults.push({
             ruleId,
             level,
-            message: {
-              text: r.ts7 ? `CONFLICT: ${conf.pkg} \u2014 ${conf.reason} Fix: ${conf.fix}` : `${conf.pkg} will break when typescript is upgraded to ^7 \u2014 plan migration now. Fix: ${conf.fix}`
-            },
+            message: { text },
             locations: [location(pkgUri, 1, 1)],
             partialFingerprints: { ts7CompatGuard: `${pkgUri}::dep::${conf.pkg}` }
+          });
+        }
+        for (const n of r.notices || []) {
+          const ruleId = `ts7-compat/ready/${n.pkg}`;
+          ensureRule({
+            id: ruleId,
+            name: `TS7Ready_${sanitize(n.pkg)}`,
+            shortDescription: { text: `${n.pkg} supports TypeScript 7` },
+            fullDescription: {
+              text: `${n.pkg} supports TypeScript 7 since ${n.readySince || n.ts7Ready}.`
+            },
+            helpUri: n.source || DEP_HELP,
+            help: { text: `Supported since ${n.readySince || n.ts7Ready}.` },
+            defaultConfiguration: { level: "note" },
+            properties: { tags: ["typescript", "typescript-7", "tsgo", "dependency", "ready"] }
+          });
+          sarifResults.push({
+            ruleId,
+            level: "note",
+            message: {
+              text: `NOTICE: ${n.pkg} ${n.effectiveVersion} \u2014 TS7 supported since ${n.readySince || n.ts7Ready}${n.source ? ` (source: ${n.source}${n.checkedAt ? `, checked ${n.checkedAt}` : ""})` : ""}`
+            },
+            locations: [location(pkgUri, 1, 1)],
+            partialFingerprints: { ts7CompatGuard: `${pkgUri}::ready::${n.pkg}` }
           });
         }
         const tsFindings = r.tsconfig && r.tsconfig.findings || [];
@@ -3279,14 +3635,37 @@ function appendSummary(md) {
 }
 function annotateConflicts(result) {
   for (const conf of result.conflicts) {
-    if (result.ts7) {
+    const severity = conf.severity || (result.ts7 ? "conflict" : "warning");
+    if (severity === "conflict") {
       emit("error", `CONFLICT: ${conf.pkg} \u2014 ${conf.reason} Fix: ${conf.fix}`);
+    } else if (conf.downgradedByShim) {
+      emit(
+        "warning",
+        `${conf.pkg} \u2014 ${conf.reason} (downgraded: TS6 API shim present) Fix: ${conf.fix}`
+      );
+    } else if (conf.partial) {
+      emit(
+        "warning",
+        `${conf.pkg} \u2014 partial TypeScript 7 support${conf.source ? ` (source: ${conf.source})` : ""}. ${conf.reason} Fix: ${conf.fix}`
+      );
     } else {
       emit(
         "warning",
         `${conf.pkg} will break when typescript is upgraded to ^7 \u2014 plan migration now. Fix: ${conf.fix}`
       );
     }
+  }
+  for (const n of result.notices || []) {
+    emit(
+      "notice",
+      `NOTICE: ${n.pkg} ${n.effectiveVersion} \u2014 TS7 supported since ${n.readySince || n.ts7Ready}${n.source ? ` (source: ${n.source}${n.checkedAt ? `, checked ${n.checkedAt}` : ""})` : ""}`
+    );
+  }
+  if (result.shim && result.shim.present) {
+    emit(
+      "notice",
+      `TS6 API shim present (@typescript/typescript6) \u2014 Compiler-API conflicts downgraded to warnings. See ${result.shim.helpUri}`
+    );
   }
   const tsFindings = result.tsconfig && result.tsconfig.findings || [];
   const tsFile = result.tsconfig && result.tsconfig.absPath ? path.relative(process.cwd(), result.tsconfig.absPath).split(path.sep).join("/") : result.tsconfig && result.tsconfig.path;
@@ -3341,7 +3720,7 @@ function main() {
       process.exitCode = 1;
       return;
     }
-    const agg = core.analyzeMany(dirs, analyzeOpts);
+    const agg = core.analyzeMany(dirs, Object.assign({ root: resolvedDir }, analyzeOpts));
     process.stdout.write(humanReportMany(agg, { color: false, root: resolvedDir }).join("\n") + "\n");
     for (const r of agg.results) {
       if (r.conflicts) annotateConflicts(r);
@@ -3353,12 +3732,15 @@ function main() {
     setOutput("conflict-count", String(activeCount));
     setOutput("tsconfig-count", String(agg.summary.totalTsconfigFindings));
     setOutput("advisory-count", String(agg.summary.totalAdvisories));
-    setOutput("status", agg.summary.activeConflictPackages > 0 ? "conflict" : agg.summary.packagesWithConflicts > 0 ? "warning" : agg.summary.totalAdvisories > 0 ? "advisory" : "clean");
+    setOutput("notice-count", String(agg.summary.totalNotices || 0));
+    setOutput("shim-detected", String(!!agg.summary.shimDetected));
+    setOutput("status", agg.summary.activeConflictPackages > 0 ? "conflict" : agg.summary.packagesWithConflicts > 0 ? "warning" : agg.summary.totalAdvisories > 0 ? "advisory" : (agg.summary.totalNotices || 0) > 0 ? "notice" : "clean");
     setOutput("json", JSON.stringify(json2));
+    staleDbNotice(agg.results.find((r) => r.dbStale && r.dbStale.stale));
     appendSummary(
       `### ts7-compat-guard
 
-Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeConflictPackages}** with active conflicts, **${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings, **${agg.summary.totalAdvisories}** advisory(ies).`
+Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeConflictPackages}** with active conflicts, **${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings, **${agg.summary.totalNotices || 0}** notice(s), **${agg.summary.totalAdvisories}** advisory(ies)${agg.summary.shimDetected ? " \u2014 TS6 API shim detected" : ""}.`
     );
     if (effectiveMode === "fail" && agg.summary.activeConflictPackages > 0) {
       emit("error", `ts7-compat-guard failed: ${agg.summary.activeConflictPackages} package(s) have active TypeScript 7.0 conflicts.`);
@@ -3383,11 +3765,14 @@ Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeCon
   setOutput("conflict-count", String(result.activeConflictCount));
   setOutput("tsconfig-count", String(tsCount));
   setOutput("advisory-count", String(result.advisoryCount));
+  setOutput("notice-count", String(result.noticeCount || 0));
+  setOutput("shim-detected", String(!!(result.shim && result.shim.present)));
   setOutput("status", json.status);
   setOutput("json", JSON.stringify(json));
-  const anyFinding = result.conflicts.length > 0 || tsCount > 0 || result.advisoryCount > 0;
+  const anyFinding = result.conflicts.length > 0 || tsCount > 0 || result.advisoryCount > 0 || (result.noticeCount || 0) > 0 || result.shim && result.shim.present;
   if (anyFinding) annotateConflicts(result);
   else emit("notice", "ts7-compat-guard: no TypeScript 7.0 / tsgo readiness issues found.");
+  staleDbNotice(result.dbStale && result.dbStale.stale ? result : null);
   if (sarifFile) writeSarif([result], resolvedDir, version, sarifFile);
   appendSummary(
     `### ts7-compat-guard
@@ -3401,6 +3786,13 @@ Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeCon
     process.exitCode = 0;
   }
 }
+function staleDbNotice(result) {
+  if (!result) return;
+  emit(
+    "notice",
+    `ts7-compat-guard: readiness db generated ${result.dbStale.generatedAt} (${result.dbStale.days} days ago) \u2014 entries may be stale; refresh with \`ts7-compat-guard db --check\`.`
+  );
+}
 function writeSarif(results, root, version, file) {
   try {
     const sarif = buildSarif(results, { root, version });
@@ -3413,7 +3805,7 @@ function writeSarif(results, root, version, file) {
   }
 }
 function safeVersion() {
-  if (true) return "2.2.1";
+  if (true) return "3.0.0";
   try {
     const fs2 = require("node:fs");
     const path2 = require("node:path");

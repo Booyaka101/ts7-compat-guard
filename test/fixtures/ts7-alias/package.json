@@ -1,0 +1,9 @@
+{
+  "name": "fixture-ts7-alias",
+  "private": true,
+  "devDependencies": {
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "ts-morph": "^22.0.0"
+  }
+}

@@ -1,102 +1,180 @@
 {
-  "@vue/language-tools": {
-    "reason": "Uses TypeScript Compiler API programmatic layer, absent in TypeScript 7.0 until 7.1",
-    "fix": "Pin typescript to ^6.x, or install @typescript/typescript6 and configure alias"
-  },
-  "volar": {
-    "reason": "Same as @vue/language-tools (predecessor package)",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "@volar/typescript": {
-    "reason": "Uses TypeScript Compiler API",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "@astrojs/language-server": {
-    "reason": "Uses TypeScript Compiler API for Astro template type-checking",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "svelte-language-server": {
-    "reason": "Uses TypeScript Compiler API for Svelte template type-checking",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "@angular/compiler-cli": {
-    "reason": "Uses TypeScript Compiler API for Angular template type-checking",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "ts-node": {
-    "reason": "Wraps TypeScript Compiler API for runtime transpilation",
-    "fix": "Use tsx or swc-node as replacements, or pin typescript to ^6.x"
-  },
-  "ts-morph": {
-    "reason": "Built entirely on the TypeScript Compiler API",
-    "fix": "Wait for ts-morph TypeScript 7.1 support or pin typescript to ^6.x"
-  },
-  "@mdx-js/mdx": {
-    "reason": "MDX type-checking embeds the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "typescript-eslint": {
-    "reason": "typescript-eslint reads types via the TypeScript Compiler API, which TypeScript 7.0 does not export until 7.1",
-    "fix": "Run typescript-eslint against @typescript/typescript6 side-by-side, or pin typescript to ^6.x"
-  },
-  "@typescript-eslint/typescript-estree": {
-    "reason": "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
-    "fix": "Install @typescript/typescript6 side-by-side, or pin typescript to ^6.x"
-  },
-  "vue-tsc": {
-    "reason": "Wraps the TypeScript Compiler API (via Volar) to type-check Vue SFC templates",
-    "fix": "Pin typescript to ^6.x, or install @typescript/typescript6 and run tsc6"
-  },
-  "svelte-check": {
-    "reason": "Uses the TypeScript Compiler API (via svelte-language-server) to type-check Svelte templates",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "@astrojs/check": {
-    "reason": "Astro's type-check CLI drives the TypeScript Compiler API (via @astrojs/language-server)",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "@typescript-eslint/parser": {
-    "reason": "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
-    "fix": "Run against @typescript/typescript6 side-by-side, or pin typescript to ^6.x"
-  },
-  "ts-loader": {
-    "reason": "webpack loader that calls the TypeScript Compiler API (createProgram / transpileModule) to compile and type-check",
-    "fix": "Switch to esbuild-loader or swc-loader, or pin typescript to ^6.x"
-  },
-  "fork-ts-checker-webpack-plugin": {
-    "reason": "Runs a full TypeScript type-check via the Compiler API in a worker process",
-    "fix": "Pin typescript to ^6.x until the plugin targets the TypeScript 7.1 API"
-  },
-  "rollup-plugin-typescript2": {
-    "reason": "Rollup plugin built on the TypeScript Compiler API (language service) for compile + type-check",
-    "fix": "Use @rollup/plugin-typescript in transpile-only mode with esbuild/swc, or pin typescript to ^6.x"
-  },
-  "@rollup/plugin-typescript": {
-    "reason": "Invokes the TypeScript Compiler API to emit and type-check during Rollup builds",
-    "fix": "Switch emit to esbuild/swc and type-check separately, or pin typescript to ^6.x"
-  },
-  "ts-jest": {
-    "reason": "Compiles and type-checks test files through the TypeScript Compiler API",
-    "fix": "Use @swc/jest or babel-jest for transform, or pin typescript to ^6.x"
-  },
-  "@microsoft/api-extractor": {
-    "reason": "Analyzes .d.ts rollups via the TypeScript Compiler API",
-    "fix": "Pin typescript to ^6.x until api-extractor supports the TypeScript 7.1 API"
-  },
-  "typedoc": {
-    "reason": "Reads program symbols and types via the TypeScript Compiler API to generate docs",
-    "fix": "Pin typescript to ^6.x until TypeDoc supports the TypeScript 7.1 API"
-  },
-  "dts-bundle-generator": {
-    "reason": "Builds bundled type declarations via the TypeScript Compiler API",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "tsd": {
-    "reason": "Runs type assertions by driving the TypeScript Compiler API",
-    "fix": "Pin typescript to ^6.x"
-  },
-  "tsup": {
-    "reason": "Generates .d.ts through the TypeScript Compiler API; its declaration step crashes on 7.0 with \"Cannot read properties of undefined (reading useCaseSensitiveFileNames)\"",
-    "fix": "Build with `--dts false` and emit declarations via tsc, or pin typescript to ^6.x until tsup supports the native compiler"
+  "generatedAt": "2026-07-29",
+  "packages": {
+    "@vue/language-tools": {
+      "reason": "Uses TypeScript Compiler API programmatic layer, absent in TypeScript 7.0 until 7.1",
+      "fix": "Pin typescript to ^6.x, or install @typescript/typescript6 and configure alias",
+      "ts7Status": "none",
+      "source": "https://github.com/vuejs/language-tools/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "volar": {
+      "reason": "Same as @vue/language-tools (predecessor package)",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://www.npmjs.com/package/volar",
+      "checkedAt": "2026-07-29"
+    },
+    "@volar/typescript": {
+      "reason": "Uses TypeScript Compiler API",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/volarjs/volar.js/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "@astrojs/language-server": {
+      "reason": "Uses TypeScript Compiler API for Astro template type-checking",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/withastro/language-tools/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "svelte-language-server": {
+      "reason": "Uses TypeScript Compiler API for Svelte template type-checking",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/sveltejs/language-tools/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "@angular/compiler-cli": {
+      "reason": "Uses TypeScript Compiler API for Angular template type-checking",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/angular/angular/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "ts-node": {
+      "reason": "Wraps TypeScript Compiler API for runtime transpilation",
+      "fix": "Use tsx or swc-node as replacements, or pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/TypeStrong/ts-node/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "ts-morph": {
+      "reason": "Built entirely on the TypeScript Compiler API",
+      "fix": "Wait for ts-morph TypeScript 7.1 support or pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/dsherret/ts-morph/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "@mdx-js/mdx": {
+      "reason": "MDX type-checking embeds the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/mdx-js/mdx/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "typescript-eslint": {
+      "reason": "typescript-eslint reads types via the TypeScript Compiler API, which TypeScript 7.0 does not export until 7.1. v8.65.0 (2026-07-20) added a warning when TS 7 is detected, but its typescript peer range is still >=4.8.4 <6.1.0",
+      "fix": "Run typescript-eslint against @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/typescript-eslint/typescript-eslint/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "reason": "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
+      "fix": "Install @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/typescript-eslint/typescript-eslint/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "vue-tsc": {
+      "reason": "Wraps the TypeScript Compiler API (via Volar) to type-check Vue SFC templates",
+      "fix": "Pin typescript to ^6.x, or install @typescript/typescript6 and run tsc6",
+      "ts7Status": "none",
+      "source": "https://github.com/vuejs/language-tools/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "svelte-check": {
+      "reason": "Uses the TypeScript Compiler API (via svelte-language-server) to type-check Svelte templates",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/sveltejs/language-tools/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "@astrojs/check": {
+      "reason": "Astro's type-check CLI drives the TypeScript Compiler API (via @astrojs/language-server)",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/withastro/language-tools/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "@typescript-eslint/parser": {
+      "reason": "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
+      "fix": "Run against @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/typescript-eslint/typescript-eslint/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "ts-loader": {
+      "reason": "webpack loader that calls the TypeScript Compiler API (createProgram / transpileModule) to compile and type-check",
+      "fix": "Switch to esbuild-loader or swc-loader, or pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/TypeStrong/ts-loader/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "fork-ts-checker-webpack-plugin": {
+      "reason": "Runs a full TypeScript type-check via the Compiler API in a worker process",
+      "fix": "Pin typescript to ^6.x until the plugin targets the TypeScript 7.1 API",
+      "ts7Status": "none",
+      "source": "https://github.com/TypeStrong/fork-ts-checker-webpack-plugin/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "rollup-plugin-typescript2": {
+      "reason": "Rollup plugin built on the TypeScript Compiler API (language service) for compile + type-check",
+      "fix": "Use @rollup/plugin-typescript in transpile-only mode with esbuild/swc, or pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/ezolenko/rollup-plugin-typescript2/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "@rollup/plugin-typescript": {
+      "reason": "Invokes the TypeScript Compiler API to emit and type-check during Rollup builds",
+      "fix": "Switch emit to esbuild/swc and type-check separately, or pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/rollup/plugins/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "ts-jest": {
+      "reason": "Compiles and type-checks test files through the TypeScript Compiler API",
+      "fix": "Use @swc/jest or babel-jest for transform, or pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/kulshekhar/ts-jest/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "@microsoft/api-extractor": {
+      "reason": "Analyzes .d.ts rollups via the TypeScript Compiler API",
+      "fix": "Pin typescript to ^6.x until api-extractor supports the TypeScript 7.1 API",
+      "ts7Status": "none",
+      "source": "https://github.com/microsoft/rushstack/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "typedoc": {
+      "reason": "Reads program symbols and types via the TypeScript Compiler API to generate docs",
+      "fix": "Pin typescript to ^6.x until TypeDoc supports the TypeScript 7.1 API",
+      "ts7Status": "none",
+      "source": "https://github.com/TypeStrong/typedoc/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "dts-bundle-generator": {
+      "reason": "Builds bundled type declarations via the TypeScript Compiler API",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/timocov/dts-bundle-generator/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "tsd": {
+      "reason": "Runs type assertions by driving the TypeScript Compiler API",
+      "fix": "Pin typescript to ^6.x",
+      "ts7Status": "none",
+      "source": "https://github.com/tsdjs/tsd/releases",
+      "checkedAt": "2026-07-29"
+    },
+    "tsup": {
+      "reason": "Generates .d.ts through the TypeScript Compiler API; its declaration step crashes on 7.0 with \"Cannot read properties of undefined (reading useCaseSensitiveFileNames)\"",
+      "fix": "Build with `--dts false` and emit declarations via tsc, or pin typescript to ^6.x until tsup supports the native compiler",
+      "ts7Status": "none",
+      "source": "https://github.com/egoist/tsup/releases",
+      "checkedAt": "2026-07-29"
+    }
   }
 }

@@ -1,0 +1,9 @@
+{
+  "name": "fake-widens",
+  "dist-tags": { "latest": "1.2.0" },
+  "versions": {
+    "1.0.0": { "name": "fake-widens", "version": "1.0.0", "peerDependencies": { "typescript": ">=4.8.4 <6.1.0" } },
+    "1.1.0": { "name": "fake-widens", "version": "1.1.0", "peerDependencies": { "typescript": ">=4.8.4 <8.0.0" } },
+    "1.2.0": { "name": "fake-widens", "version": "1.2.0", "peerDependencies": { "typescript": ">=5.0.0 <8.0.0" } }
+  }
+}

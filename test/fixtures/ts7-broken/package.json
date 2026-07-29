@@ -1,0 +1,8 @@
+{
+  "name": "fixture-ts7-broken",
+  "private": true,
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "ts-morph": "^22.0.0"
+  }
+}

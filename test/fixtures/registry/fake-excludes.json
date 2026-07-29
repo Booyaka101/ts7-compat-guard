@@ -1,0 +1,9 @@
+{
+  "name": "fake-excludes",
+  "dist-tags": { "latest": "2.0.0" },
+  "versions": {
+    "1.0.0": { "name": "fake-excludes", "version": "1.0.0", "peerDependencies": { "typescript": ">=4.8.4 <6.1.0" } },
+    "2.0.0": { "name": "fake-excludes", "version": "2.0.0", "peerDependencies": { "typescript": ">=4.8.4 <6.1.0" } },
+    "3.0.0-alpha.1": { "name": "fake-excludes", "version": "3.0.0-alpha.1", "peerDependencies": { "typescript": ">=4.8.4 <8.0.0" } }
+  }
+}

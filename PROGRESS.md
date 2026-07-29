@@ -1,67 +1,59 @@
 # PROGRESS — ts7-compat-guard
 
-## Status: v1.0.0 COMPLETE — fully built, hardened, verified end-to-end with real data.
+## Status: v3.0.0 COMPLETE — readiness ledger + TS6 shim + alias layouts, verified end-to-end.
 
-Date: 2026-07-25
+Date: 2026-07-29 (previous entries: v1.0.0 2026-07-25; v2.x shipped through 2026-07-28 — see CHANGELOG.md, which now backfills 2.1.0/2.2.0/2.2.1)
 
-## Phase 0 verification (PASSED)
-- TS 7.0 GA (2026-07-08) ships WITHOUT the programmatic Compiler API (deferred to 7.1) —
-  verified via https://typescriptpro.com/blog/typescript-version-7-2026-07-08 (WebFetch)
-  and corroborated by Microsoft's own devblog + multiple outlets (WebSearch).
-- Incompatible frameworks confirmed: Vue/Volar, Astro, Svelte, MDX, Angular template type-checking.
-- `@typescript/typescript6` compatibility package (ships `tsc6`) confirmed to exist.
-- COST: none. Pure Node + `semver`. No paid API/account/hosting. Not blocked.
+## Phase 0 verification for v3 (PASSED, all fetched live 2026-07-29)
+- Devblog (announcing-typescript-7-0): "does not ship with an API … expect TypeScript 7.1",
+  plus BOTH side-by-side layouts (`npm install -D typescript@npm:@typescript/typescript6`
+  and `"typescript": "npm:@typescript/typescript6@^6.0.2"` + `"@typescript/native": "npm:typescript@^7.0.2"`). ✓
+- registry.npmjs.org/@typescript/typescript6: dist-tags.latest 6.0.2, published
+  2026-07-06T18:06:47.459Z, bin { "tsc6": "bin/tsc6" }, fetchable unauthenticated. ✓
+- typescript-eslint releases: v8.65.0 (2026-07-20) "add warning when TS 7 is detected". ✓
+- typescript-eslint packument: peer range ">=4.8.4 <6.1.0" on 8.63/8.64/8.65 (bounded, excludes 7). ✓
+- COST: none (registry + GitHub API are free/unauthenticated). Not blocked.
 
-## What VERIFIABLY works (84/84 tests pass)
-Core (`src/core.js`):
-- Effective typescript resolution: dependencies/devDependencies AND overrides/resolutions/pnpm.overrides
-  (override pin wins — recognises the documented "pin to ^6" fix). Handles workspace:/npm: aliases, `*`,
-  prereleases (7.0.0-beta flagged via major>=7 fallback), non-semver treated conservatively as not-TS7.
-- Conflict scan, ignore lists, custom/extra db merge, config loading, recursive package.json discovery
-  (skips node_modules/build/dot dirs), aggregate summaries, exit-code logic (single + recursive).
-Report (`src/report.js`): human (single + recursive, posix paths, color on TTY) + JSON (single + recursive).
-SARIF (`src/sarif.js`): SARIF 2.1.0 — **validated against the real json.schemastore.org schema with ajv 8** (valid).
-CLI (`src/cli.js`): --dir, --recursive/-r, --json, --sarif, --sarif-file, --mode, --ignore, --db,
-  --no-config, --help, --version. Exit 0/1/2.
-Action (`src/action.js`): inputs package-dir/mode/recursive/ignore/sarif-file/config; outputs
-  ts7/conflict-count/status/json; ::error/::warning/::notice annotations; GITHUB_OUTPUT + job summary; SARIF write.
-DB (`src/db.json`): 24 curated Compiler-API packages, each with reason + fix.
-`action.yml`: node20 → dist/action.js. **Passes action-validator (exit 0).**
-`dist/action.js`: self-contained esbuild bundle (semver + db.json inlined), 95.6kB.
+## What v3 adds (all VERIFIED working, 151/151 tests green)
+- db.json → `{ generatedAt, packages }`; every entry has ts7Status/source/checkedAt.
+  Truthful seed: ts7Status "none" for all 25 — verified by running `db --check` LIVE
+  against registry.npmjs.org (output in the build log): 0 packages propose "supported",
+  7 unbounded ranges correctly report "unknown — manual check", the rest "none".
+- Effective-version resolution (node_modules first, min of declared range as fallback,
+  repo-root fallback for hoisted monorepos, malformed manifests fall back gracefully).
+- ts7Ready satisfied → NOTICE (new severity, never fails); ts7Status "partial" → WARNING+source.
+- Shim detection, both layouts; downgrades Compiler-API conflicts to warnings, NOT tsconfig
+  conflicts; alias-target resolution (npm:typescript@^7 under any key = TS7 present;
+  typescript→shim alias = TS6 API half).
+- `db --check` (src/db-check.js): bounded-range rule, unbounded NEVER proposed as supported,
+  404/network/missing-peer → "unknown", writes nothing, --from/--json/--timeout, offline-testable.
+- Stale-db notice (>60 days), non-failing.
+- Action: notice-count + shim-detected outputs, notice annotations; SARIF: level "note"
+  under ts7-compat/ready/<pkg>; per-entry severity everywhere.
+- README (readiness table, shim section, db --check docs, @v3 snippets), CHANGELOG (3.0.0
+  + backfilled 2.1.0/2.2.0/2.2.1), action.yml outputs, ts7-guard.yml example @v3.
 
-## Acceptance criteria — ALL VERIFIED
-1. ts@^7 + @vue/language-tools → CONFLICT, exit 1. ✓
-2. ts@^6 + @vue/language-tools → WARNING only, exit 0. ✓
-3. ts@^7 + no conflicts → clean, exit 0. ✓
-4. --json valid JSON. ✓
-5. action.yml passes action-validator. ✓
+## Acceptance checks — ALL VERIFIED (2026-07-29)
+1. npm test → 151 passed, 0 failed (114 pre-existing + 37 new). ✓
+2. `npx . --dir test/fixtures/ts7-ready` → exit 0, "NOTICE: typescript-eslint 8.70.0 — TS7 supported since 8.70.0". ✓
+3. `npx . --dir test/fixtures/ts7-shim` → exit 0, "TS6 API shim present". ✓
+4. `npx . --dir test/fixtures/ts7-broken` → exit 1, CONFLICT ts-morph. ✓
+5. `npx . --dir test/fixtures/ts7-alias` → exit 0, "TypeScript 7.0 detected via \"@typescript/native\"" + shim advisory. ✓
+6. `node dist/action.js` on all four fixtures → identical severities/exit codes to the CLI. ✓
+7. `grep -c '"ts7Status"' src/db.json` → 25. ✓
+Plus: npm pack → clean-dir install (relative tarball path) → bin runs, --version 3.0.0. ✓
 
-## Extra end-to-end verification (real data, packed artifact)
-- `npm pack` → install tarball in scratch monorepo → `npx ts7-compat-guard` ran: single (CONFLICT exit 1),
-  --recursive (per-package web CONFLICT + lib WARNING, exit 1), -r --json (valid), -r --sarif-file (SARIF 2.1.0, 3 results).
-- SARIF validated against schemastore sarif-2.1.0.json via ajv 8 (strict:false, validateFormats:false) → valid.
-
-## Repo files
-README.md, CHANGELOG.md, LICENSE (MIT), .gitignore, PROGRESS.md,
-.github/workflows/ci.yml (test matrix 18/20/22 + bundle-drift + action-validate + self-test dogfood),
-.github/workflows/ts7-guard.yml (consumer example incl. SARIF upload),
-test/ (84 checks) + fixtures (ts7-vue, ts6-vue, ts7-clean, no-typescript, overrides-pin, resolutions-ts7,
-  config-ignore w/ .ts7guardrc.json, monorepo/*).
+## Known quirks / next steps
+- `@vue/language-tools` is the MONOREPO name, not an npm package (registry 404s; the real
+  packages are @vue/language-core / @vue/language-server / vue-tsc). The db entry is inert
+  (nobody can depend on it) and harmless; `db --check` reports it "unknown (404)" as designed.
+  v3.1 lead: replace it with @vue/language-core + @vue/language-server.
+- `db --check` skips prereleases when proposing ts7Ready (conservative by design).
+- Owner distribution steps (phone): push, `npm publish`, tag v3.0.0 + move v3 major tag
+  (tags created locally here), GitHub release with the CHANGELOG 3.0.0 entry. Best first
+  distribution: comment on the live "TS7 support" threads that the guard now recognises
+  the official @typescript/typescript6 escape hatch and dated readiness.
 
 ## Build/test commands
-- `npm install`
-- `npm run build`  (regenerate dist/action.js — MUST run + commit before tagging; CI enforces via bundle-drift)
-- `npm test`
-
-## Next steps (distribution — owner action, NOT done here per no-publish/no-account rules)
-1. `git init`, commit everything **including `dist/`**, push to public GitHub repo (replace OWNER placeholders).
-2. `npm publish` as `ts7-compat-guard` (needs npm login).
-3. Tag `v1` → consumers use `uses: Booyaka101/ts7-compat-guard@v1`.
-4. Highest-signal launch: short post to the live "Add support for TypeScript 7" threads
-   (nestjs/nest-cli#3479, vercel/next.js#95633, cypress-io/cypress#34258) — exact audience hitting this wall.
-5. Grow src/db.json as framework packages confirm TS7 support; consider a `--fix` mode.
-
-## Notes / design decisions
-- The db is the moat — entries are known TS-programmatic-Compiler-API consumers; a bogus placeholder was
-  deliberately removed to avoid false positives (per LESSONS stale-data doctrine).
-- No new LESSONS.md fact: every external resource/tool behaved as documented.
+- `npm install` · `npm run build` (rebuild dist/ before tagging; CI enforces drift) · `npm test`
+- dist/action.js rebuilt and committed for 3.0.0 (version injected via esbuild define).

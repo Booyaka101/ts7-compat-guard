@@ -1,0 +1,12 @@
+{
+  "db": {
+    "typescript-eslint": {
+      "reason": "typescript-eslint reads types via the TypeScript Compiler API, which TypeScript 7.0 does not export until 7.1",
+      "fix": "Run typescript-eslint against @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
+      "ts7Ready": ">=8.70.0",
+      "ts7Status": "supported",
+      "source": "https://github.com/typescript-eslint/typescript-eslint/releases",
+      "checkedAt": "2026-07-29"
+    }
+  }
+}

@@ -24,9 +24,26 @@ const DIST = path.join(__dirname, '..', 'dist', 'action.js');
 let passed = 0;
 let failed = 0;
 
+const pending = [];
 function test(name, fn) {
   try {
-    fn();
+    const r = fn();
+    if (r && typeof r.then === 'function') {
+      // Async test — settled before the summary prints (see the end of file).
+      pending.push(
+        r.then(
+          () => {
+            passed++;
+            process.stdout.write(`  ✓ ${name}\n`);
+          },
+          (e) => {
+            failed++;
+            process.stdout.write(`  ✗ ${name}\n    ${e.message}\n`);
+          }
+        )
+      );
+      return;
+    }
     passed++;
     process.stdout.write(`  ✓ ${name}\n`);
   } catch (e) {
@@ -659,6 +676,341 @@ test('action emits tsconfig-count + advisory-count outputs', () => {
   fs.unlinkSync(outFile);
 });
 
+// ==================== v3: readiness ledger, shim, aliases ====================
+const dbCheck = require('../src/db-check');
+
+section('v3: db schema');
+test('shipped db has generatedAt + 25 entries, all with ts7Status', () => {
+  const doc = core.dbDoc;
+  assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(doc.generatedAt), 'generatedAt is an ISO date');
+  const names = Object.keys(doc.packages);
+  assert.strictEqual(names.length, 25);
+  for (const n of names) {
+    assert.ok(['none', 'partial', 'supported'].includes(doc.packages[n].ts7Status), n);
+    assert.ok(typeof doc.packages[n].source === 'string' && /^https:/.test(doc.packages[n].source), n);
+    assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(doc.packages[n].checkedAt), n);
+  }
+});
+test('shipped db seeds no ts7Ready (truthful as of 2026-07-29)', () => {
+  for (const [n, e] of Object.entries(core.builtinDb)) {
+    assert.strictEqual(e.ts7Ready, undefined, `${n} must not invent a ts7Ready`);
+  }
+});
+
+section('v3: effective version resolution');
+const READY_DB = {
+  'typescript-eslint': {
+    reason: 'r',
+    fix: 'f',
+    ts7Ready: '>=8.70.0',
+    ts7Status: 'supported',
+    source: 'https://example.com/releases',
+    checkedAt: '2026-07-29',
+  },
+};
+test('resolved version satisfies ts7Ready -> notice, no conflict', () => {
+  const r = core.analyze(
+    { devDependencies: { typescript: '^7.0.2', 'typescript-eslint': '^8.70.0' } },
+    { extraDb: READY_DB }
+  );
+  assert.strictEqual(r.conflicts.length, 0);
+  assert.strictEqual(r.notices.length, 1);
+  assert.strictEqual(r.notices[0].pkg, 'typescript-eslint');
+  assert.strictEqual(r.notices[0].effectiveVersion, '8.70.0');
+  assert.strictEqual(r.notices[0].readySince, '8.70.0');
+  assert.strictEqual(r.hasActiveConflict, false);
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+});
+test('resolved version below ts7Ready -> conflict, exit 1', () => {
+  const r = core.analyze(
+    { devDependencies: { typescript: '^7.0.2', 'typescript-eslint': '^8.60.0' } },
+    { extraDb: READY_DB }
+  );
+  assert.strictEqual(r.notices.length, 0);
+  assert.strictEqual(r.conflicts.length, 1);
+  assert.strictEqual(r.conflicts[0].severity, 'conflict');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+test('node_modules version overrides the declared range', () => {
+  const dir = FIX('ts7-ready');
+  const nm = path.join(dir, 'node_modules', 'typescript-eslint');
+  fs.mkdirSync(nm, { recursive: true });
+  fs.writeFileSync(
+    path.join(nm, 'package.json'),
+    JSON.stringify({ name: 'typescript-eslint', version: '8.71.0' })
+  );
+  try {
+    const r = core.analyzeDir(dir, { extraDb: READY_DB });
+    assert.strictEqual(r.notices.length, 1);
+    assert.strictEqual(r.notices[0].effectiveVersion, '8.71.0');
+    assert.strictEqual(r.notices[0].effectiveSource, 'node_modules');
+  } finally {
+    fs.rmSync(path.join(dir, 'node_modules'), { recursive: true, force: true });
+  }
+});
+test('malformed node_modules manifest falls back to the declared range', () => {
+  const dir = FIX('ts7-ready');
+  const nm = path.join(dir, 'node_modules', 'typescript-eslint');
+  fs.mkdirSync(nm, { recursive: true });
+  fs.writeFileSync(path.join(nm, 'package.json'), '{ not json');
+  try {
+    const r = core.analyzeDir(dir, { extraDb: READY_DB });
+    assert.strictEqual(r.notices.length, 1);
+    assert.strictEqual(r.notices[0].effectiveVersion, '8.70.0');
+    assert.strictEqual(r.notices[0].effectiveSource, 'declared');
+  } finally {
+    fs.rmSync(path.join(dir, 'node_modules'), { recursive: true, force: true });
+  }
+});
+test('prerelease effective version compared with includePrerelease', () => {
+  const r = core.analyze(
+    { devDependencies: { typescript: '^7.0.2', 'typescript-eslint': '8.70.1-alpha.1' } },
+    { extraDb: READY_DB }
+  );
+  assert.strictEqual(r.notices.length, 1, JSON.stringify(r.conflicts));
+});
+test('ts7Status partial -> warning with source, never fails', () => {
+  const r = core.analyze(
+    { devDependencies: { typescript: '^7.0.2', 'typescript-eslint': '^8.65.0' } },
+    {
+      extraDb: {
+        'typescript-eslint': {
+          reason: 'r',
+          fix: 'f',
+          ts7Status: 'partial',
+          source: 'https://example.com/releases',
+        },
+      },
+    }
+  );
+  assert.strictEqual(r.conflicts[0].severity, 'warning');
+  assert.strictEqual(r.conflicts[0].partial, true);
+  assert.strictEqual(r.conflicts[0].source, 'https://example.com/releases');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+});
+
+section('v3: shim detection');
+test('plain @typescript/typescript6 dependency detected', () => {
+  const s = core.detectShim({ '@typescript/typescript6': '^6.0.2' });
+  assert.deepStrictEqual(s, { present: true, layout: 'dependency', key: '@typescript/typescript6', range: '^6.0.2' });
+});
+test('npm: alias to the shim detected (any key)', () => {
+  const s = core.detectShim({ typescript: 'npm:@typescript/typescript6@^6.0.2' });
+  assert.strictEqual(s.present, true);
+  assert.strictEqual(s.layout, 'alias');
+  assert.strictEqual(s.range, '^6.0.2');
+});
+test('shim downgrades API conflicts to warnings -> exit 0', () => {
+  const r = core.analyzeDir(FIX('ts7-shim'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.shim.present, true);
+  assert.strictEqual(r.conflicts[0].pkg, 'ts-morph');
+  assert.strictEqual(r.conflicts[0].severity, 'warning');
+  assert.strictEqual(r.conflicts[0].downgradedByShim, true);
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+});
+test('shim does NOT downgrade removed-tsconfig conflicts -> exit 1', () => {
+  const r = core.analyzeDir(FIX('ts7-shim-tsconfig'));
+  assert.strictEqual(r.shim.present, true);
+  assert.strictEqual(r.conflicts[0].severity, 'warning'); // dep downgraded
+  const baseUrl = r.tsconfig.findings.find((f) => f.id === 'base-url');
+  assert.strictEqual(baseUrl.severity, 'conflict'); // tsconfig NOT downgraded
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+
+section('v3: alias layouts (the announcement side-by-side)');
+test('analyzeTypescriptVersion keeps the alias target', () => {
+  const r = core.analyzeTypescriptVersion('npm:@typescript/typescript6@^6.0.2');
+  assert.strictEqual(r.aliasTarget, '@typescript/typescript6');
+  assert.strictEqual(r.ts7, false);
+});
+test('npm:typescript@^7 alias still reads as TS7', () => {
+  const r = core.analyzeTypescriptVersion('npm:typescript@^7.0.2');
+  assert.strictEqual(r.aliasTarget, 'typescript');
+  assert.strictEqual(r.ts7, true);
+});
+test('alias layout -> TS7 present + shim + dep warning + exit 0', () => {
+  const r = core.analyzeDir(FIX('ts7-alias'));
+  assert.strictEqual(r.ts7, true, 'TS7 must be detected via @typescript/native');
+  assert.strictEqual(r.typescript.shimAlias, true);
+  assert.strictEqual(r.typescript.ts7Alias.key, '@typescript/native');
+  assert.strictEqual(r.shim.present, true);
+  assert.strictEqual(r.conflicts[0].pkg, 'ts-morph');
+  assert.strictEqual(r.conflicts[0].severity, 'warning');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+});
+test('alias layout human report names both halves', () => {
+  const text = report.humanReport(core.analyzeDir(FIX('ts7-alias')), { color: false }).join('\n');
+  assert.ok(/TS6 API shim/.test(text), text);
+  assert.ok(/TypeScript 7\.0 detected via "@typescript\/native"/.test(text), text);
+});
+
+section('v3: stale db notice');
+test('generatedAt older than 60 days -> stale, non-failing', () => {
+  const r = core.analyze(
+    { devDependencies: { typescript: '^7.0.2' } },
+    { db: { generatedAt: '2026-01-01', packages: {} }, now: Date.parse('2026-07-29') }
+  );
+  assert.strictEqual(r.dbStale.stale, true);
+  assert.ok(r.dbStale.days > 60);
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+  const text = report.humanReport(r, { color: false }).join('\n');
+  assert.ok(/readiness db generated 2026-01-01/.test(text), text);
+});
+test('fresh generatedAt -> no stale notice', () => {
+  const r = core.analyze(
+    { devDependencies: { typescript: '^7.0.2' } },
+    { db: { generatedAt: '2026-07-29', packages: {} }, now: Date.parse('2026-07-29') }
+  );
+  assert.strictEqual(r.dbStale.stale, false);
+});
+
+section('v3: db --check');
+test('bounded range that widens -> supported at the earliest widening version', () => {
+  const doc = JSON.parse(fs.readFileSync(path.join(FIX('registry'), 'fake-widens.json'), 'utf8'));
+  const a = dbCheck.analyzePackument(doc);
+  assert.strictEqual(a.status, 'supported');
+  assert.strictEqual(a.firstReady, '1.1.0');
+});
+test('unbounded range -> unknown, never supported', () => {
+  const doc = JSON.parse(fs.readFileSync(path.join(FIX('registry'), 'fake-unbounded.json'), 'utf8'));
+  const a = dbCheck.analyzePackument(doc);
+  assert.strictEqual(a.status, 'unknown');
+  assert.ok(/unbounded/.test(a.detail));
+});
+test('bounded range that still excludes 7.x -> none (prerelease ignored)', () => {
+  const doc = JSON.parse(fs.readFileSync(path.join(FIX('registry'), 'fake-excludes.json'), 'utf8'));
+  const a = dbCheck.analyzePackument(doc);
+  assert.strictEqual(a.status, 'none');
+});
+test('checkDb produces the expected patch from fixture packuments', async () => {
+  const load = (name) => dbCheck.readPackumentFile(FIX('registry'), name);
+  const packages = {
+    'fake-widens': { reason: 'r', fix: 'f', ts7Status: 'none' },
+    'fake-unbounded': { reason: 'r', fix: 'f', ts7Status: 'none' },
+    'fake-excludes': { reason: 'r', fix: 'f', ts7Status: 'none' },
+    'fake-missing': { reason: 'r', fix: 'f', ts7Status: 'none' },
+  };
+  const { results, patch } = await dbCheck.checkDb({ packages, load });
+  assert.deepStrictEqual(Object.keys(patch), ['fake-widens']);
+  assert.strictEqual(patch['fake-widens'].ts7Ready, '>=1.1.0');
+  assert.strictEqual(patch['fake-widens'].ts7Status, 'supported');
+  const missing = results.find((r) => r.name === 'fake-missing');
+  assert.strictEqual(missing.analysis.status, 'unknown'); // fetch failed -> unknown, no crash
+  assert.strictEqual(missing.proposal, null);
+});
+test('spawned CLI: db --check --from fixtures exits 0 and prints the patch', () => {
+  const r = spawnCli(['db', '--check', '--from', FIX('registry')]);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.ok(/Proposed db\.json patch|No db\.json changes/.test(r.stdout), r.stdout);
+  assert.ok(/unknown/.test(r.stdout));
+});
+test('spawned CLI: db without --check exits 2', () => {
+  const r = spawnCli(['db']);
+  assert.strictEqual(r.status, 2);
+});
+test('isUnbounded/admitsTs7 match the measured registry reality', () => {
+  assert.strictEqual(dbCheck.isUnbounded('*'), true);
+  assert.strictEqual(dbCheck.isUnbounded('>=2.7'), true);
+  assert.strictEqual(dbCheck.isUnbounded('>=4.8.4 <6.1.0'), false);
+  assert.strictEqual(dbCheck.admitsTs7('>=4.8.4 <6.1.0'), false);
+  assert.strictEqual(dbCheck.admitsTs7('>=4.8.4 <8.0.0'), true);
+});
+
+section('v3: CLI acceptance fixtures');
+test('AC: ts7-ready -> NOTICE naming the supporting version, exit 0', () => {
+  const { code, out } = runCli(['--dir', FIX('ts7-ready')]);
+  assert.ok(/NOTICE: typescript-eslint 8\.70\.0 — TS7 supported since 8\.70\.0/.test(out), out);
+  assert.ok(/source: https:\/\/github\.com\/typescript-eslint/.test(out), out);
+  assert.strictEqual(code, 0);
+});
+test('AC: ts7-shim -> shim advisory, exit 0', () => {
+  const { code, out } = runCli(['--dir', FIX('ts7-shim')]);
+  assert.ok(/TS6 API shim present/.test(out), out);
+  assert.ok(/WARNING: ts-morph/.test(out), out);
+  assert.strictEqual(code, 0);
+});
+test('AC: ts7-broken -> CONFLICT, exit 1', () => {
+  const { code, out } = runCli(['--dir', FIX('ts7-broken')]);
+  assert.ok(/CONFLICT: ts-morph/.test(out), out);
+  assert.strictEqual(code, 1);
+});
+test('AC: ts7-alias -> TS7 + shim advisory, exit 0 (v2 got this wrong)', () => {
+  const { code, out } = runCli(['--dir', FIX('ts7-alias')]);
+  assert.ok(/TypeScript 7\.0 detected via "@typescript\/native"/.test(out), out);
+  assert.ok(/TS6 API shim present/.test(out), out);
+  assert.strictEqual(code, 0);
+});
+test('summary line counts notices', () => {
+  const { out } = runCli(['--dir', FIX('ts7-ready')]);
+  assert.ok(/1 notice\(s\)/.test(out), out);
+});
+test('mixed ready + broken -> conflict AND notice, exit 1', () => {
+  const r = core.analyze(
+    {
+      devDependencies: {
+        typescript: '^7.0.2',
+        'typescript-eslint': '^8.70.0',
+        'ts-morph': '^22.0.0',
+      },
+    },
+    { extraDb: READY_DB }
+  );
+  assert.strictEqual(r.activeConflictCount, 1);
+  assert.strictEqual(r.noticeCount, 1);
+  const text = report.humanReport(r, { color: false }).join('\n');
+  assert.ok(/1 conflict\(s\) · 1 notice\(s\)/.test(text), text);
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+
+section('v3: SARIF notice level');
+test('SARIF carries the notice level for TS7-ready deps', () => {
+  const r = core.analyzeDir(FIX('ts7-ready'), {
+    extraDb: READY_DB,
+  });
+  const s = sarif.buildSarif([r], { root: FIX('ts7-ready'), version: '3.0.0' });
+  const ready = s.runs[0].results.find((x) => x.ruleId === 'ts7-compat/ready/typescript-eslint');
+  assert.ok(ready, JSON.stringify(s.runs[0].results));
+  assert.strictEqual(ready.level, 'note');
+  assert.ok(/TS7 supported since 8\.70\.0/.test(ready.message.text));
+});
+test('SARIF shim-downgraded dep -> warning level', () => {
+  const s = sarif.buildSarif([core.analyzeDir(FIX('ts7-shim'))], { root: FIX('ts7-shim') });
+  const dep = s.runs[0].results.find((x) => x.ruleId === 'ts7-compat/dep/ts-morph');
+  assert.strictEqual(dep.level, 'warning');
+  assert.ok(/TS6 API shim/.test(dep.message.text));
+});
+
+section('v3: Action');
+test('action ts7-ready -> exit 0, notice-count + shim outputs', () => {
+  const outFile = path.join(__dirname, '.tmp-ghout3');
+  fs.writeFileSync(outFile, '');
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts7-ready'), INPUT_MODE: 'fail', GITHUB_OUTPUT: outFile });
+  assert.strictEqual(r.status, 0, r.stdout);
+  assert.ok(/::notice::NOTICE: typescript-eslint/.test(r.stdout), r.stdout);
+  const outs = fs.readFileSync(outFile, 'utf8');
+  assert.ok(/notice-count<</.test(outs), outs);
+  assert.ok(/shim-detected<</.test(outs), outs);
+  fs.unlinkSync(outFile);
+});
+test('action ts7-shim -> exit 0 + shim notice annotation', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts7-shim'), INPUT_MODE: 'fail' });
+  assert.strictEqual(r.status, 0, r.stdout);
+  assert.ok(/::notice::TS6 API shim present/.test(r.stdout), r.stdout);
+  assert.ok(/::warning::ts-morph/.test(r.stdout), r.stdout);
+});
+test('action ts7-alias -> exit 0 (v2 exited reading TS6)', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts7-alias'), INPUT_MODE: 'fail' });
+  assert.strictEqual(r.status, 0, r.stdout);
+  assert.ok(/TS6 API shim/.test(r.stdout), r.stdout);
+});
+test('action ts7-broken -> still exit 1', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts7-broken'), INPUT_MODE: 'fail' });
+  assert.strictEqual(r.status, 1);
+});
+
 // -------------------- summary --------------------
-process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
-if (failed > 0) process.exit(1);
+Promise.all(pending).then(() => {
+  process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
+  if (failed > 0) process.exit(1);
+});

@@ -59,16 +59,40 @@ function appendSummary(md) {
 }
 
 function annotateConflicts(result) {
-  // dependencies
+  // dependencies — severity is per-entry since v3 (shim downgrades, partial support)
   for (const conf of result.conflicts) {
-    if (result.ts7) {
+    const severity = conf.severity || (result.ts7 ? 'conflict' : 'warning');
+    if (severity === 'conflict') {
       emit('error', `CONFLICT: ${conf.pkg} — ${conf.reason} Fix: ${conf.fix}`);
+    } else if (conf.downgradedByShim) {
+      emit(
+        'warning',
+        `${conf.pkg} — ${conf.reason} (downgraded: TS6 API shim present) Fix: ${conf.fix}`
+      );
+    } else if (conf.partial) {
+      emit(
+        'warning',
+        `${conf.pkg} — partial TypeScript 7 support${conf.source ? ` (source: ${conf.source})` : ''}. ${conf.reason} Fix: ${conf.fix}`
+      );
     } else {
       emit(
         'warning',
         `${conf.pkg} will break when typescript is upgraded to ^7 — plan migration now. Fix: ${conf.fix}`
       );
     }
+  }
+  // TS7-ready notices — informational, never fail
+  for (const n of result.notices || []) {
+    emit(
+      'notice',
+      `NOTICE: ${n.pkg} ${n.effectiveVersion} — TS7 supported since ${n.readySince || n.ts7Ready}${n.source ? ` (source: ${n.source}${n.checkedAt ? `, checked ${n.checkedAt}` : ''})` : ''}`
+    );
+  }
+  if (result.shim && result.shim.present) {
+    emit(
+      'notice',
+      `TS6 API shim present (@typescript/typescript6) — Compiler-API conflicts downgraded to warnings. See ${result.shim.helpUri}`
+    );
   }
   // tsconfig removed options — annotate on the tsconfig.json file/line,
   // pathed relative to the workspace so GitHub links the annotation correctly.
@@ -139,7 +163,7 @@ function main() {
       process.exitCode = 1;
       return;
     }
-    const agg = core.analyzeMany(dirs, analyzeOpts);
+    const agg = core.analyzeMany(dirs, Object.assign({ root: resolvedDir }, analyzeOpts));
     process.stdout.write(humanReportMany(agg, { color: false, root: resolvedDir }).join('\n') + '\n');
     for (const r of agg.results) {
       if (r.conflicts) annotateConflicts(r);
@@ -152,13 +176,18 @@ function main() {
     setOutput('conflict-count', String(activeCount));
     setOutput('tsconfig-count', String(agg.summary.totalTsconfigFindings));
     setOutput('advisory-count', String(agg.summary.totalAdvisories));
-    setOutput('status', agg.summary.activeConflictPackages > 0 ? 'conflict' : agg.summary.packagesWithConflicts > 0 ? 'warning' : agg.summary.totalAdvisories > 0 ? 'advisory' : 'clean');
+    setOutput('notice-count', String(agg.summary.totalNotices || 0));
+    setOutput('shim-detected', String(!!agg.summary.shimDetected));
+    setOutput('status', agg.summary.activeConflictPackages > 0 ? 'conflict' : agg.summary.packagesWithConflicts > 0 ? 'warning' : agg.summary.totalAdvisories > 0 ? 'advisory' : (agg.summary.totalNotices || 0) > 0 ? 'notice' : 'clean');
     setOutput('json', JSON.stringify(json));
+    staleDbNotice(agg.results.find((r) => r.dbStale && r.dbStale.stale));
     appendSummary(
       `### ts7-compat-guard\n\nScanned **${agg.summary.packagesScanned}** package(s): ` +
         `**${agg.summary.activeConflictPackages}** with active conflicts, ` +
         `**${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings, ` +
-        `**${agg.summary.totalAdvisories}** advisory(ies).`
+        `**${agg.summary.totalNotices || 0}** notice(s), ` +
+        `**${agg.summary.totalAdvisories}** advisory(ies)` +
+        `${agg.summary.shimDetected ? ' — TS6 API shim detected' : ''}.`
     );
 
     if (effectiveMode === 'fail' && agg.summary.activeConflictPackages > 0) {
@@ -188,12 +217,20 @@ function main() {
   setOutput('conflict-count', String(result.activeConflictCount));
   setOutput('tsconfig-count', String(tsCount));
   setOutput('advisory-count', String(result.advisoryCount));
+  setOutput('notice-count', String(result.noticeCount || 0));
+  setOutput('shim-detected', String(!!(result.shim && result.shim.present)));
   setOutput('status', json.status);
   setOutput('json', JSON.stringify(json));
 
-  const anyFinding = result.conflicts.length > 0 || tsCount > 0 || result.advisoryCount > 0;
+  const anyFinding =
+    result.conflicts.length > 0 ||
+    tsCount > 0 ||
+    result.advisoryCount > 0 ||
+    (result.noticeCount || 0) > 0 ||
+    (result.shim && result.shim.present);
   if (anyFinding) annotateConflicts(result);
   else emit('notice', 'ts7-compat-guard: no TypeScript 7.0 / tsgo readiness issues found.');
+  staleDbNotice(result.dbStale && result.dbStale.stale ? result : null);
 
   if (sarifFile) writeSarif([result], resolvedDir, version, sarifFile);
 
@@ -210,6 +247,14 @@ function main() {
   } else {
     process.exitCode = 0;
   }
+}
+
+function staleDbNotice(result) {
+  if (!result) return;
+  emit(
+    'notice',
+    `ts7-compat-guard: readiness db generated ${result.dbStale.generatedAt} (${result.dbStale.days} days ago) — entries may be stale; refresh with \`ts7-compat-guard db --check\`.`
+  );
 }
 
 function writeSarif(results, root, version, file) {

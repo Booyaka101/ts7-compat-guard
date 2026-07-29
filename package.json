@@ -1,7 +1,7 @@
 {
   "name": "ts7-compat-guard",
-  "version": "2.2.1",
-  "description": "TypeScript 7.0 / tsgo readiness scanner — flags Compiler-API dependencies, removed tsconfig.json options (with exact line numbers), and behavioural advisories before they break your build. Manifest/config only, no source-file scanning, no false positives. npx CLI + GitHub Action + SARIF.",
+  "version": "3.0.0",
+  "description": "TypeScript 7.0 / tsgo readiness scanner with a dated readiness ledger — flags Compiler-API dependencies (until their release train actually supports TS7), detects the @typescript/typescript6 API shim in both documented layouts, removed tsconfig.json options (with exact line numbers), and behavioural advisories. Manifest/config only, no source-file scanning, no false positives. npx CLI + GitHub Action + SARIF.",
   "bin": {
     "ts7-compat-guard": "src/cli.js"
   },
@@ -10,6 +10,7 @@
     ".": "./src/core.js",
     "./report": "./src/report.js",
     "./sarif": "./src/sarif.js",
+    "./db-check": "./src/db-check.js",
     "./tsconfig": "./src/tsconfig.js",
     "./db.json": "./src/db.json",
     "./package.json": "./package.json"

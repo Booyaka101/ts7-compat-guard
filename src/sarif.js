@@ -57,7 +57,8 @@ function buildSarif(results, opts = {}) {
     // ---- dependency conflicts ----
     for (const conf of r.conflicts || []) {
       const ruleId = `ts7-compat/dep/${conf.pkg}`;
-      const level = r.ts7 ? 'error' : 'warning';
+      const severity = conf.severity || (r.ts7 ? 'conflict' : 'warning');
+      const level = severity === 'conflict' ? 'error' : 'warning';
       ensureRule({
         id: ruleId,
         name: `TS7Dep_${sanitize(conf.pkg)}`,
@@ -68,16 +69,48 @@ function buildSarif(results, opts = {}) {
         defaultConfiguration: { level: 'error' },
         properties: { tags: ['typescript', 'typescript-7', 'tsgo', 'dependency'] },
       });
+      let text;
+      if (severity === 'conflict') {
+        text = `CONFLICT: ${conf.pkg} — ${conf.reason} Fix: ${conf.fix}`;
+      } else if (conf.downgradedByShim) {
+        text = `WARNING: ${conf.pkg} — ${conf.reason} (downgraded: TS6 API shim present, see ${DEP_HELP}) Fix: ${conf.fix}`;
+      } else if (conf.partial) {
+        text = `WARNING: ${conf.pkg} — partial TypeScript 7 support${conf.source ? ` (source: ${conf.source})` : ''}. ${conf.reason} Fix: ${conf.fix}`;
+      } else {
+        text = `${conf.pkg} will break when typescript is upgraded to ^7 — plan migration now. Fix: ${conf.fix}`;
+      }
       sarifResults.push({
         ruleId,
         level,
-        message: {
-          text: r.ts7
-            ? `CONFLICT: ${conf.pkg} — ${conf.reason} Fix: ${conf.fix}`
-            : `${conf.pkg} will break when typescript is upgraded to ^7 — plan migration now. Fix: ${conf.fix}`,
-        },
+        message: { text },
         locations: [location(pkgUri, 1, 1)],
         partialFingerprints: { ts7CompatGuard: `${pkgUri}::dep::${conf.pkg}` },
+      });
+    }
+
+    // ---- TS7-ready notices ----
+    for (const n of r.notices || []) {
+      const ruleId = `ts7-compat/ready/${n.pkg}`;
+      ensureRule({
+        id: ruleId,
+        name: `TS7Ready_${sanitize(n.pkg)}`,
+        shortDescription: { text: `${n.pkg} supports TypeScript 7` },
+        fullDescription: {
+          text: `${n.pkg} supports TypeScript 7 since ${n.readySince || n.ts7Ready}.`,
+        },
+        helpUri: n.source || DEP_HELP,
+        help: { text: `Supported since ${n.readySince || n.ts7Ready}.` },
+        defaultConfiguration: { level: 'note' },
+        properties: { tags: ['typescript', 'typescript-7', 'tsgo', 'dependency', 'ready'] },
+      });
+      sarifResults.push({
+        ruleId,
+        level: 'note',
+        message: {
+          text: `NOTICE: ${n.pkg} ${n.effectiveVersion} — TS7 supported since ${n.readySince || n.ts7Ready}${n.source ? ` (source: ${n.source}${n.checkedAt ? `, checked ${n.checkedAt}` : ''})` : ''}`,
+        },
+        locations: [location(pkgUri, 1, 1)],
+        partialFingerprints: { ts7CompatGuard: `${pkgUri}::ready::${n.pkg}` },
       });
     }
 
