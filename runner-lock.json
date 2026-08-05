@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "label": "ubuntu-24.04",
+  "imageOS": "ubuntu24",
+  "imageVersion": "20260720.247.2",
+  "tools": {
+    "Git": {
+      "versions": [
+        "2.54.0"
+      ],
+      "source": "manifest"
+    },
+    "Node.js": {
+      "versions": [
+        "22.23.1"
+      ],
+      "source": "manifest"
+    }
+  },
+  "updatedAt": "2026-08-05T04:23:01.738Z"
+}
