@@ -12,7 +12,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const core = require('./core');
-const { humanReport, humanReportMany, jsonReport, jsonReportMany } = require('./report');
+const { humanReport, humanReportMany, jsonReport, jsonReportMany, peerText } = require('./report');
 const { buildSarif } = require('./sarif');
 
 // GitHub uppercases the input name and replaces spaces with underscores, keeps
@@ -81,6 +81,10 @@ function annotateConflicts(result) {
       );
     }
   }
+  // installed-tree peer findings — warning by default, error with strict-peers
+  for (const p of result.peerFindings || []) {
+    emit(p.severity === 'conflict' ? 'error' : 'warning', peerText(p));
+  }
   // TS7-ready notices — informational, never fail
   for (const n of result.notices || []) {
     emit(
@@ -124,6 +128,15 @@ function main() {
   const sarifFile = getInput('sarif-file', null);
   const ignoreInput = getInput('ignore', '');
   const useConfig = getBoolInput('config', true);
+  const targetTs = getInput('target-ts', null);
+  const strictPeers = getBoolInput('strict-peers', false);
+  const peers = getBoolInput('peers', true);
+
+  if (targetTs != null && !require('semver').valid(String(targetTs).trim())) {
+    emit('error', `ts7-compat-guard: target-ts must be an exact semver version like 7.0.2, got "${targetTs}"`);
+    process.exitCode = 1;
+    return;
+  }
 
   const resolvedDir = path.resolve(process.cwd(), dirInput);
 
@@ -146,7 +159,7 @@ function main() {
     );
   const extraDb = config.db && typeof config.db === 'object' ? config.db : {};
   const effectiveMode = mode === 'warn' || mode === 'fail' ? mode : config.mode || 'fail';
-  const analyzeOpts = { extraDb, ignore };
+  const analyzeOpts = { extraDb, ignore, peers, strictPeers, targetTs: targetTs || undefined };
   const version = safeVersion();
 
   if (recursive) {
@@ -177,14 +190,22 @@ function main() {
     setOutput('tsconfig-count', String(agg.summary.totalTsconfigFindings));
     setOutput('advisory-count', String(agg.summary.totalAdvisories));
     setOutput('notice-count', String(agg.summary.totalNotices || 0));
+    setOutput('peer-count', String(agg.summary.totalPeerFindings || 0));
     setOutput('shim-detected', String(!!agg.summary.shimDetected));
     setOutput('status', agg.summary.activeConflictPackages > 0 ? 'conflict' : agg.summary.packagesWithConflicts > 0 ? 'warning' : agg.summary.totalAdvisories > 0 ? 'advisory' : (agg.summary.totalNotices || 0) > 0 ? 'notice' : 'clean');
     setOutput('json', JSON.stringify(json));
     staleDbNotice(agg.results.find((r) => r.dbStale && r.dbStale.stale));
+    if (peers && !agg.summary.peerScanRan) {
+      emit(
+        'notice',
+        'ts7-compat-guard: installed-tree peer scan not run — no node_modules found; run npm install for full coverage.'
+      );
+    }
     appendSummary(
       `### ts7-compat-guard\n\nScanned **${agg.summary.packagesScanned}** package(s): ` +
         `**${agg.summary.activeConflictPackages}** with active conflicts, ` +
         `**${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings, ` +
+        `**${agg.summary.totalPeerFindings || 0}** installed-tree peer finding(s), ` +
         `**${agg.summary.totalNotices || 0}** notice(s), ` +
         `**${agg.summary.totalAdvisories}** advisory(ies)` +
         `${agg.summary.shimDetected ? ' — TS6 API shim detected' : ''}.`
@@ -218,6 +239,7 @@ function main() {
   setOutput('tsconfig-count', String(tsCount));
   setOutput('advisory-count', String(result.advisoryCount));
   setOutput('notice-count', String(result.noticeCount || 0));
+  setOutput('peer-count', String(result.peerFindingCount || 0));
   setOutput('shim-detected', String(!!(result.shim && result.shim.present)));
   setOutput('status', json.status);
   setOutput('json', JSON.stringify(json));
@@ -227,9 +249,16 @@ function main() {
     tsCount > 0 ||
     result.advisoryCount > 0 ||
     (result.noticeCount || 0) > 0 ||
+    (result.peerFindingCount || 0) > 0 ||
     (result.shim && result.shim.present);
   if (anyFinding) annotateConflicts(result);
   else emit('notice', 'ts7-compat-guard: no TypeScript 7.0 / tsgo readiness issues found.');
+  if (result.peerScan && !result.peerScan.disabled && !result.peerScan.ran) {
+    emit(
+      'notice',
+      'ts7-compat-guard: installed-tree peer scan not run — no node_modules found; run npm install for full coverage.'
+    );
+  }
   staleDbNotice(result.dbStale && result.dbStale.stale ? result : null);
 
   if (sarifFile) writeSarif([result], resolvedDir, version, sarifFile);
@@ -238,6 +267,7 @@ function main() {
     `### ts7-compat-guard\n\n\`typescript\` ${result.typescript.raw || 'n/a'} → ` +
       `${result.ts7 ? 'TypeScript 7.0 detected' : 'TypeScript 6.x'} · ` +
       `**${result.activeConflictCount}** conflict(s), **${result.warningCount}** warning(s), ` +
+      `**${result.peerFindingCount || 0}** installed-tree peer finding(s), ` +
       `**${result.advisoryCount}** advisory(ies) (status: ${json.status}).`
   );
 

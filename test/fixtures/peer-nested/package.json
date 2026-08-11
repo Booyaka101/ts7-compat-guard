@@ -1,0 +1,7 @@
+{
+  "name": "peer-nested",
+  "private": true,
+  "devDependencies": {
+    "typescript": "^6.2.0"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "peer-ledger-direct",
+  "private": true,
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "ts-morph": "^23.0.0"
+  }
+}

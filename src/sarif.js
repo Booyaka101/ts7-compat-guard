@@ -5,8 +5,11 @@
  * in GitHub's Security → Code scanning tab. Dependency-free — the schema is
  * simple enough to construct by hand.
  *
- * Three finding families, each a distinct rule namespace so GitHub groups them:
+ * Finding families, each a distinct rule namespace so GitHub groups them:
  *   ts7-compat/dep/<pkg>        Compiler-API dependency (package.json)
+ *   ts7-compat/ready/<pkg>      TS7-ready dependency notice (package.json)
+ *   ts7-compat/peer/<pkg>       installed package whose bounded typescript peer
+ *                               range excludes the target (installed tree)
  *   ts7-compat/tsconfig/<id>    removed compiler option (tsconfig.json, exact line)
  *   ts7-compat/risk/<id>        behavioural advisory (tsconfig.json, exact line)
  */
@@ -111,6 +114,37 @@ function buildSarif(results, opts = {}) {
         },
         locations: [location(pkgUri, 1, 1)],
         partialFingerprints: { ts7CompatGuard: `${pkgUri}::ready::${n.pkg}` },
+      });
+    }
+
+    // ---- installed-tree peer findings ----
+    for (const p of r.peerFindings || []) {
+      const ruleId = `ts7-compat/peer/${p.pkg}`;
+      const level = p.severity === 'conflict' ? 'error' : 'warning';
+      ensureRule({
+        id: ruleId,
+        name: `TS7Peer_${sanitize(p.pkg)}`,
+        shortDescription: {
+          text: `${p.pkg} declares a typescript peer range that excludes ${p.target}`,
+        },
+        fullDescription: {
+          text: `An installed copy of ${p.pkg} declares peerDependencies.typescript "${p.range}", a bounded range that excludes TypeScript ${p.target} — it will not resolve against TypeScript 7 at install time.`,
+        },
+        helpUri: DEP_HELP,
+        help: {
+          text: `Upgrade ${p.pkg} to a release whose typescript peer range admits ${p.target}, or keep typescript pinned below 7 until it exists.`,
+        },
+        defaultConfiguration: { level: 'warning' },
+        properties: { tags: ['typescript', 'typescript-7', 'tsgo', 'peer-dependency', 'installed-tree'] },
+      });
+      sarifResults.push({
+        ruleId,
+        level,
+        message: {
+          text: `${p.severity === 'conflict' ? 'CONFLICT' : 'WARNING'}: ${p.pkg}${p.version ? ` ${p.version}` : ''} — declares peerDependencies.typescript "${p.range}", which excludes ${p.target}${p.optional ? ' (optional peer — lower confidence; an optional peer does not always block an install)' : ''}`,
+        },
+        locations: [location(pkgUri, 1, 1)],
+        partialFingerprints: { ts7CompatGuard: `${pkgUri}::peer::${p.pkg}@${p.version || '?'}` },
       });
     }
 

@@ -1,0 +1,7 @@
+{
+  "name": "peer-optional",
+  "private": true,
+  "devDependencies": {
+    "typescript": "^6.2.0"
+  }
+}

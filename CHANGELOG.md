@@ -4,6 +4,58 @@ All notable changes to `ts7-compat-guard` are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [3.1.0] - 2026-08-11
+
+A second, **generic** dependency pillar: the installed tree. Until now the
+dependency scan was the 25-name curated ledger over **direct** manifest
+dependencies only — anything transitive, or simply not in `src/db.json`,
+produced a clean scan. That is a false all-clear from a tool whose stated
+promise is "accuracy is the point".
+
+### Added
+- **Installed-tree peer scan** (`scanInstalledPeers` in `src/core.js`):
+  enumerates every `node_modules/<pkg>/package.json` (scoped packages, nested
+  `node_modules`, and pnpm's `.pnpm` store — depth-bounded, symlink-loop-safe,
+  each package realpath'd once so pnpm's symlinked layout is never reported
+  twice), reads `peerDependencies.typescript`, and reports each package whose
+  **bounded** range excludes the target TypeScript version (default **7.0.2**,
+  the npm `latest` as of 2026-08-11). The bounded-range doctrine from
+  `db --check` applies per range: an unbounded range (`*`, `>=4.8.4`) is never
+  evidence and never produces a finding. Real shapes verified live on
+  2026-08-11: `@typescript-eslint/parser@8.67.0` declares `>=4.8.4 <6.1.0`,
+  `svelte-check@4.7.5` declares `^5.0.0 || ^6.0.0` — both excluded 7.0.2 at
+  scan time.
+- **Per-finding precedence with the curated ledger**: a package the curated
+  pillar actually reported (conflict, notice, or ignored) keeps its ledger
+  entry and is not repeated. A ledger package that is only installed
+  **transitively** never reaches the curated pillar, so the generic pillar
+  still reports it — a per-name suppression would have silently reproduced
+  the old blind spot.
+- `peerDependenciesMeta.typescript.optional: true` lowers confidence and the
+  message says so — an optional peer does not always block an install.
+- Severity: peer findings are **warnings** and never fail `--mode fail`. New
+  **`--strict-peers`** promotes them to `conflict`. Rationale: a bounded peer
+  range excluding 7.x proves an install-time peer conflict, not a runtime
+  crash — pnpm, yarn and `npm --legacy-peer-deps` install straight through it.
+- New CLI flags **`--target-ts <v>`** (exact version the ranges are tested
+  against), **`--strict-peers`**, **`--no-peers`**.
+- Report: an **`[installed tree]`** section (with the target version); a repo
+  with no `node_modules` prints `not run — no node_modules found; run npm
+  install for full coverage` — never an empty pass. Malformed manifests are
+  skipped and counted (`peerScan.skipped`). `typescript` itself and
+  `@typescript/typescript6` are excluded.
+- JSON: `peerFindings`, `peerFindingCount`, `peerScan`
+  (ran/disabled/target/treesScanned/packagesInspected/packagesWithTsPeer/skipped).
+- SARIF: rule ids under **`ts7-compat/peer/<pkg>`** (level `warning`, `error`
+  with strict-peers).
+- Action: inputs **`target-ts`**, **`strict-peers`**, **`peers`**; output
+  **`peer-count`**; warning/error annotations per finding and a notice when
+  the scan could not run.
+- Measured before shipping on 15 real public TypeScript repos (see README
+  "Measured hit-rate") — the pillar's findings are hand-verified against the
+  packages' published registry manifests.
+- 32 new tests (183 total).
+
 ## [3.0.0] - 2026-07-29
 
 The name list becomes a **dated readiness ledger**, and the officially

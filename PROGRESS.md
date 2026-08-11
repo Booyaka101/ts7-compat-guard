@@ -1,63 +1,64 @@
 # PROGRESS — ts7-compat-guard
 
-## Status: v3.0.0 COMPLETE — readiness ledger + TS6 shim + alias layouts, verified end-to-end.
+## Status: v3.1.0 COMPLETE — installed-tree peer scan (generic second pillar), verified end-to-end. NOT yet published (owner ships from phone).
 
-Date: 2026-07-29 (previous entries: v1.0.0 2026-07-25; v2.x shipped through 2026-07-28 — see CHANGELOG.md, which now backfills 2.1.0/2.2.0/2.2.1)
+Date: 2026-08-11 (v3.0.0 shipped 2026-07-29 — npm latest, GitHub release, announce comment; see below)
 
-## Phase 0 verification for v3 (PASSED, all fetched live 2026-07-29)
-- Devblog (announcing-typescript-7-0): "does not ship with an API … expect TypeScript 7.1",
-  plus BOTH side-by-side layouts (`npm install -D typescript@npm:@typescript/typescript6`
-  and `"typescript": "npm:@typescript/typescript6@^6.0.2"` + `"@typescript/native": "npm:typescript@^7.0.2"`). ✓
-- registry.npmjs.org/@typescript/typescript6: dist-tags.latest 6.0.2, published
-  2026-07-06T18:06:47.459Z, bin { "tsc6": "bin/tsc6" }, fetchable unauthenticated. ✓
-- typescript-eslint releases: v8.65.0 (2026-07-20) "add warning when TS 7 is detected". ✓
-- typescript-eslint packument: peer range ">=4.8.4 <6.1.0" on 8.63/8.64/8.65 (bounded, excludes 7). ✓
-- COST: none (registry + GitHub API are free/unauthenticated). Not blocked.
+## Phase 0 verification for v3.1 (PASSED, all fetched live 2026-08-11)
+- registry.npmjs.org/@typescript-eslint/parser/8.67.0 → peerDependencies.typescript ">=4.8.4 <6.1.0" ✓
+- registry.npmjs.org/svelte-check/4.7.5 → peerDependencies.typescript "^5.0.0 || ^6.0.0" (compound ||) ✓
+- typescript dist-tags → latest 7.0.2, next 7.1.0-dev.20260811.1 (7.1 still nightly) ✓
+- tsgo-ready (competitor) → 0.2.1, curated name blacklist only, never reads installed peers ✓
+- check-peer-dependencies → 4.3.4, "unmet NOW" checker, no TS7/target notion ✓
+- COST: none (registry + GitHub clones are free). Not blocked. LESSONS.md: no contradictions.
 
-## What v3 adds (all VERIFIED working, 151/151 tests green)
-- db.json → `{ generatedAt, packages }`; every entry has ts7Status/source/checkedAt.
-  Truthful seed: ts7Status "none" for all 25 — verified by running `db --check` LIVE
-  against registry.npmjs.org (output in the build log): 0 packages propose "supported",
-  7 unbounded ranges correctly report "unknown — manual check", the rest "none".
-- Effective-version resolution (node_modules first, min of declared range as fallback,
-  repo-root fallback for hoisted monorepos, malformed manifests fall back gracefully).
-- ts7Ready satisfied → NOTICE (new severity, never fails); ts7Status "partial" → WARNING+source.
-- Shim detection, both layouts; downgrades Compiler-API conflicts to warnings, NOT tsconfig
-  conflicts; alias-target resolution (npm:typescript@^7 under any key = TS7 present;
-  typescript→shim alias = TS6 API half).
-- `db --check` (src/db-check.js): bounded-range rule, unbounded NEVER proposed as supported,
-  404/network/missing-peer → "unknown", writes nothing, --from/--json/--timeout, offline-testable.
-- Stale-db notice (>60 days), non-failing.
-- Action: notice-count + shim-detected outputs, notice annotations; SARIF: level "note"
-  under ts7-compat/ready/<pkg>; per-entry severity everywhere.
-- README (readiness table, shim section, db --check docs, @v3 snippets), CHANGELOG (3.0.0
-  + backfilled 2.1.0/2.2.0/2.2.1), action.yml outputs, ts7-guard.yml example @v3.
+## What v3.1 adds (all VERIFIED working, 183/183 tests green — baseline was 151)
+- `scanInstalledPeers(nodeModulesDirs, targetVersion)` in src/core.js: walks
+  node_modules (scoped, nested depth≤6, pnpm .pnpm store), realpath-dedupes
+  (symlink-loop-safe), reads peerDependencies.typescript, flags BOUNDED ranges
+  that exclude the target (default 7.0.2, `--target-ts` to override).
+  Unbounded ranges never fire (same doctrine as db --check). typescript +
+  @typescript/typescript6 excluded. Malformed manifests skipped + counted.
+- Per-FINDING precedence: curated conflict/notice/ignored suppresses the
+  generic duplicate; transitively-installed ledger packages still reported.
+- optional peers flagged with "(optional peer — lower confidence…)".
+- Severity: warning by default (never fails --mode fail); `--strict-peers`
+  promotes to conflict (exit 1). `--no-peers` disables.
+- Surfaces: [installed tree] report section + "not run — no node_modules
+  found" note (never an empty pass); JSON peerFindings/peerFindingCount/
+  peerScan; SARIF ts7-compat/peer/<pkg>; Action inputs target-ts/strict-peers/
+  peers + output peer-count + annotations.
+- MEASURED on 15 real repos (17 attempted; zod+typeorm npm-install failed):
+  repos hit 9/15 (60%); packages flagged 79/12,263 (0.64%); 79/134 (59%) of
+  packages with any ts peer; 26 unique name@version; 0 skipped. 8/8 sampled
+  hits hand-VERIFIED against published registry manifests. Raw data:
+  scratch-measure/results.jsonl (gitignored scratch).
 
-## Acceptance checks — ALL VERIFIED (2026-07-29)
-1. npm test → 151 passed, 0 failed (114 pre-existing + 37 new). ✓
-2. `npx . --dir test/fixtures/ts7-ready` → exit 0, "NOTICE: typescript-eslint 8.70.0 — TS7 supported since 8.70.0". ✓
-3. `npx . --dir test/fixtures/ts7-shim` → exit 0, "TS6 API shim present". ✓
-4. `npx . --dir test/fixtures/ts7-broken` → exit 1, CONFLICT ts-morph. ✓
-5. `npx . --dir test/fixtures/ts7-alias` → exit 0, "TypeScript 7.0 detected via \"@typescript/native\"" + shim advisory. ✓
-6. `node dist/action.js` on all four fixtures → identical severities/exit codes to the CLI. ✓
-7. `grep -c '"ts7Status"' src/db.json` → 25. ✓
-Plus: npm pack → clean-dir install (relative tarball path) → bin runs, --version 3.0.0. ✓
+## Acceptance checks — ALL VERIFIED (2026-08-11)
+a. npm test → 183 passed, 0 failed (151 baseline + 32 new). ✓
+b. `node src/cli.js --dir test/fixtures/peer-worked` → exactly the two WARNING
+   lines (parser 8.67.0, svelte-check 4.7.5) + "2 warning(s) — these will not
+   resolve against TypeScript 7.", exit 0. ✓
+c. same + --strict-peers → exit 1. ✓
+d. peer-unbounded fixture → no peer section, "✓ No … issues found", exit 0. ✓
+e. dist/action.js rebuilt (3.1.0 injected) and committed. ✓
+f. README carries the real measured hit-rate table. ✓
+Plus real-input E2E: scan of cloned honojs/hono → 9 warnings incl.
+@hono/eslint-config "^5.0.0 || ^6.0.0", exit 0.
 
 ## Known quirks / next steps
-- `@vue/language-tools` is the MONOREPO name, not an npm package (registry 404s; the real
-  packages are @vue/language-core / @vue/language-server / vue-tsc). The db entry is inert
-  (nobody can depend on it) and harmless; `db --check` reports it "unknown (404)" as designed.
-  v3.1 lead: replace it with @vue/language-core + @vue/language-server.
-- `db --check` skips prereleases when proposing ts7Ready (conservative by design).
-- Distribution DONE (2026-07-29, owner-authorized): pushed main + tags (v3.0.0, v3 moved);
-  `npm publish` → ts7-compat-guard@3.0.0 is dist-tag latest (verified via npm view);
-  GitHub release https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v3.0.0;
-  CI/Guards/self-test all green on the release commit. Announce comment posted on
-  nestjs/nest-cli#3479 (open, on-topic — thread already discussed the alias layout):
-  https://github.com/nestjs/nest-cli/issues/3479#issuecomment-5112249808.
-  vercel/next.js#95633 no longer exists (404) and cypress-io/cypress#34258 is closed —
-  deliberately NOT posted there (no spamming closed/irrelevant threads).
+- `@vue/language-tools` phantom db entry (monorepo name, registry 404s) still
+  in the ledger — deliberately NOT swapped this release (it anchors ~10
+  existing tests/fixtures; inert and harmless). Still the lead for a future
+  release: replace with @vue/language-core + @vue/language-server.
+- nested node_modules depth bound is 6 (PEER_SCAN_MAX_DEPTH).
+- .ts7guardrc.json does NOT carry targetTs/strictPeers (CLI/Action only).
+- Distribution (owner, from phone): `npm publish` (prepublishOnly runs
+  build+test), `git push --follow-tags`, move the v3 major tag, GitHub release.
+  Announce angle: "your lockfile already knows it won't resolve on TS7 —
+  0.64% of installed packages, 60% of real repos".
 
 ## Build/test commands
 - `npm install` · `npm run build` (rebuild dist/ before tagging; CI enforces drift) · `npm test`
-- dist/action.js rebuilt and committed for 3.0.0 (version injected via esbuild define).
+- Measurement harness (scratch, gitignored): `node scratch-measure/measure.mjs`
+  then `node scratch-measure/aggregate.mjs`.

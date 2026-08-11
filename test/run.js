@@ -1009,6 +1009,209 @@ test('action ts7-broken -> still exit 1', () => {
   assert.strictEqual(r.status, 1);
 });
 
+// ==================== v3.1: installed-tree peer scan ====================
+section('v3.1: scanInstalledPeers (core)');
+test('worked example: bounded + compound || ranges -> 2 findings', () => {
+  const s = core.scanInstalledPeers([FIX('peer-worked')], '7.0.2');
+  assert.strictEqual(s.ran, true);
+  assert.strictEqual(s.findings.length, 2);
+  assert.deepStrictEqual(
+    s.findings.map((f) => [f.pkg, f.version, f.range]),
+    [
+      ['@typescript-eslint/parser', '8.67.0', '>=4.8.4 <6.1.0'],
+      ['svelte-check', '4.7.5', '^5.0.0 || ^6.0.0'],
+    ]
+  );
+});
+test('unbounded ranges are silent; typescript itself excluded', () => {
+  const s = core.scanInstalledPeers([FIX('peer-unbounded')], '7.0.2');
+  assert.strictEqual(s.ran, true);
+  assert.strictEqual(s.findings.length, 0);
+  assert.strictEqual(s.packagesWithTsPeer, 2, 'loose-star + loose-floor inspected');
+});
+test('optional peer flagged with optional: true', () => {
+  const s = core.scanInstalledPeers([FIX('peer-optional')], '7.0.2');
+  assert.strictEqual(s.findings.length, 1);
+  assert.strictEqual(s.findings[0].optional, true);
+});
+test('nested node_modules found; same name@version deduped', () => {
+  const s = core.scanInstalledPeers([FIX('peer-nested')], '7.0.2');
+  assert.deepStrictEqual(s.findings.map((f) => f.pkg), ['inner-tool']);
+});
+test('pnpm .pnpm store traversed', () => {
+  const s = core.scanInstalledPeers([FIX('peer-pnpm')], '7.0.2');
+  assert.deepStrictEqual(s.findings.map((f) => f.pkg), ['pnpm-tool']);
+});
+test('malformed manifest skipped and counted', () => {
+  const s = core.scanInstalledPeers([FIX('peer-malformed')], '7.0.2');
+  assert.strictEqual(s.skipped, 1);
+  assert.deepStrictEqual(s.findings.map((f) => f.pkg), ['good-tool']);
+});
+test('no node_modules -> ran: false', () => {
+  const s = core.scanInstalledPeers([FIX('ts7-clean')], '7.0.2');
+  assert.strictEqual(s.ran, false);
+  assert.strictEqual(s.treesScanned, 0);
+});
+test('target satisfied by all ranges -> no findings', () => {
+  const s = core.scanInstalledPeers([FIX('peer-worked')], '5.4.5');
+  assert.strictEqual(s.findings.length, 0);
+});
+test('invalid target throws EBADTARGET', () => {
+  assert.throws(() => core.scanInstalledPeers([FIX('peer-worked')], 'nope'), /EBADTARGET|invalid target/);
+});
+
+section('v3.1: peer findings in analyzeDir');
+test('transitive ledger packages are NOT suppressed (per-finding precedence)', () => {
+  // parser + svelte-check are both in db.json, but only as transitive installs
+  // here — the curated pillar never sees them, so the generic one must report.
+  const r = core.analyzeDir(FIX('peer-worked'));
+  assert.strictEqual(r.conflicts.length, 0);
+  assert.strictEqual(r.peerFindings.length, 2);
+  assert.strictEqual(r.warningCount, 2);
+  assert.strictEqual(r.hasActiveConflict, false);
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+});
+test('curated finding suppresses the generic duplicate for the same package', () => {
+  const r = core.analyzeDir(FIX('peer-ledger-direct'));
+  assert.strictEqual(r.conflicts.length, 1);
+  assert.strictEqual(r.conflicts[0].pkg, 'ts-morph');
+  assert.strictEqual(r.peerFindings.length, 0, JSON.stringify(r.peerFindings));
+});
+test('strictPeers promotes to conflict -> fails --mode fail', () => {
+  const r = core.analyzeDir(FIX('peer-worked'), { strictPeers: true });
+  assert.strictEqual(r.peerFindings.every((p) => p.severity === 'conflict'), true);
+  assert.strictEqual(r.hasActiveConflict, true);
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+test('peers: false disables the scan', () => {
+  const r = core.analyzeDir(FIX('peer-worked'), { peers: false });
+  assert.strictEqual(r.peerFindings.length, 0);
+  assert.strictEqual(r.peerScan.disabled, true);
+});
+test('--ignore also silences a peer finding', () => {
+  const r = core.analyzeDir(FIX('peer-worked'), { ignore: ['svelte-check'] });
+  assert.deepStrictEqual(r.peerFindings.map((p) => p.pkg), ['@typescript-eslint/parser']);
+});
+
+section('v3.1: CLI');
+test('worked example prints exactly the two WARNING lines, exit 0', () => {
+  const { code, out } = runCli(['--dir', FIX('peer-worked')]);
+  assert.strictEqual(code, 0);
+  assert.ok(/\[installed tree\]\s+\(target: typescript 7\.0\.2\)/.test(out), out);
+  const warnings = out.split('\n').filter((l) => /^\s*WARNING:/.test(l));
+  assert.deepStrictEqual(warnings.map((l) => l.trim()), [
+    'WARNING: @typescript-eslint/parser 8.67.0 — declares peerDependencies.typescript ">=4.8.4 <6.1.0", which excludes 7.0.2',
+    'WARNING: svelte-check 4.7.5 — declares peerDependencies.typescript "^5.0.0 || ^6.0.0", which excludes 7.0.2',
+  ]);
+  assert.ok(/2 warning\(s\) — these will not resolve against TypeScript 7\./.test(out), out);
+});
+test('--strict-peers -> CONFLICT lines, exit 1', () => {
+  const { code, out } = runCli(['--dir', FIX('peer-worked'), '--strict-peers']);
+  assert.strictEqual(code, 1);
+  assert.ok(/CONFLICT: @typescript-eslint\/parser/.test(out), out);
+});
+test('--strict-peers --mode warn -> still exit 0', () =>
+  assert.strictEqual(runCli(['--dir', FIX('peer-worked'), '--strict-peers', '--mode', 'warn']).code, 0));
+test('unbounded fixture prints no peer section, exit 0', () => {
+  const { code, out } = runCli(['--dir', FIX('peer-unbounded')]);
+  assert.strictEqual(code, 0);
+  assert.ok(!/installed tree/.test(out), out);
+  assert.ok(!/WARNING/.test(out), out);
+});
+test('optional peer says so in the message', () => {
+  const { out } = runCli(['--dir', FIX('peer-optional')]);
+  assert.ok(/opt-peer-tool 2\.0\.0 — declares peerDependencies\.typescript "\^5\.0\.0", which excludes 7\.0\.2 \(optional peer — lower confidence; an optional peer does not always block an install\)/.test(out), out);
+});
+test('--target-ts changes the target (5.4.5 satisfies both ranges)', () => {
+  const { code, out } = runCli(['--dir', FIX('peer-worked'), '--target-ts', '5.4.5']);
+  assert.strictEqual(code, 0);
+  assert.ok(!/installed tree/.test(out), out);
+});
+test('invalid --target-ts -> exit 2', () => {
+  const { code, err } = runCli(['--dir', FIX('peer-worked'), '--target-ts', 'seven']);
+  assert.strictEqual(code, 2);
+  assert.ok(/--target-ts must be an exact semver version/.test(err), err);
+});
+test('--no-peers hides the section', () => {
+  const { code, out } = runCli(['--dir', FIX('peer-worked'), '--no-peers']);
+  assert.strictEqual(code, 0);
+  assert.ok(!/installed tree/.test(out), out);
+});
+test('no node_modules -> "not run" note, never an empty pass', () => {
+  const { code, out } = runCli(['--dir', FIX('ts7-clean')]);
+  assert.strictEqual(code, 0);
+  assert.ok(/\[installed tree\]\s+not run — no node_modules found; run npm install for full coverage/.test(out), out);
+});
+test('--json carries peerFindings + peerFindingCount + peerScan', () => {
+  const { out } = runCli(['--dir', FIX('peer-worked'), '--json']);
+  const j = JSON.parse(out);
+  assert.strictEqual(j.peerFindingCount, 2);
+  assert.strictEqual(j.peerFindings[0].pkg, '@typescript-eslint/parser');
+  assert.strictEqual(j.peerFindings[0].range, '>=4.8.4 <6.1.0');
+  assert.strictEqual(j.peerFindings[1].severity, 'warning');
+  assert.strictEqual(j.peerScan.ran, true);
+  assert.ok(j.peerScan.packagesInspected >= 2);
+  assert.strictEqual(j.status, 'warning');
+});
+
+section('v3.1: SARIF peer rules');
+test('SARIF rule ids under ts7-compat/peer/<pkg>, level warning', () => {
+  const r = core.analyzeDir(FIX('peer-worked'));
+  const s = sarif.buildSarif([r], { root: FIX('peer-worked') });
+  const peerResults = s.runs[0].results.filter((x) => x.ruleId.startsWith('ts7-compat/peer/'));
+  assert.strictEqual(peerResults.length, 2);
+  assert.ok(peerResults.every((x) => x.level === 'warning'));
+  assert.ok(s.runs[0].tool.driver.rules.some((x) => x.id === 'ts7-compat/peer/@typescript-eslint/parser'));
+});
+test('SARIF strict-peers -> level error', () => {
+  const r = core.analyzeDir(FIX('peer-worked'), { strictPeers: true });
+  const s = sarif.buildSarif([r], { root: FIX('peer-worked') });
+  assert.ok(s.runs[0].results.filter((x) => x.ruleId.startsWith('ts7-compat/peer/')).every((x) => x.level === 'error'));
+});
+
+section('v3.1: Action');
+test('action peer findings -> ::warning:: + peer-count output, exit 0', () => {
+  const outFile = path.join(__dirname, '.tmp-ghout3');
+  fs.writeFileSync(outFile, '');
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('peer-worked'), INPUT_MODE: 'fail', GITHUB_OUTPUT: outFile });
+  assert.strictEqual(r.status, 0, r.stdout);
+  assert.ok(/::warning::WARNING: @typescript-eslint\/parser 8\.67\.0/.test(r.stdout), r.stdout);
+  const outs = fs.readFileSync(outFile, 'utf8');
+  assert.ok(/peer-count<<[\s\S]*?2/.test(outs), outs);
+  fs.unlinkSync(outFile);
+});
+test('action strict-peers input -> ::error:: + exit 1', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('peer-worked'), INPUT_MODE: 'fail', 'INPUT_STRICT-PEERS': 'true' });
+  assert.strictEqual(r.status, 1, r.stdout);
+  assert.ok(/::error::CONFLICT: @typescript-eslint\/parser/.test(r.stdout), r.stdout);
+});
+test('action peers=false disables the scan', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('peer-worked'), INPUT_MODE: 'fail', INPUT_PEERS: 'false' });
+  assert.strictEqual(r.status, 0, r.stdout);
+  assert.ok(!/installed tree/.test(r.stdout), r.stdout);
+});
+test('action invalid target-ts -> exit 1 + ::error::', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('peer-worked'), 'INPUT_TARGET-TS': 'seven' });
+  assert.strictEqual(r.status, 1);
+  assert.ok(/::error::ts7-compat-guard: target-ts must be an exact semver version/.test(r.stdout), r.stdout);
+});
+test('action no node_modules -> not-run notice', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts7-clean'), INPUT_MODE: 'fail' });
+  assert.strictEqual(r.status, 0);
+  assert.ok(/::notice::ts7-compat-guard: installed-tree peer scan not run/.test(r.stdout), r.stdout);
+});
+
+if (fs.existsSync(DIST)) {
+  section('v3.1: bundled dist');
+  test('dist bundle peer findings -> ::warning:: + exit 0; strict -> exit 1', () => {
+    const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('peer-worked'), INPUT_MODE: 'fail' }, DIST);
+    assert.strictEqual(r.status, 0, r.stdout);
+    assert.ok(/::warning::WARNING: @typescript-eslint\/parser/.test(r.stdout), r.stdout);
+    const strict = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('peer-worked'), INPUT_MODE: 'fail', 'INPUT_STRICT-PEERS': 'true' }, DIST);
+    assert.strictEqual(strict.status, 1, strict.stdout);
+  });
+}
+
 // -------------------- summary --------------------
 Promise.all(pending).then(() => {
   process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

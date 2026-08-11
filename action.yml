@@ -37,6 +37,23 @@ inputs:
     description: Read .ts7guardrc.json from package-dir. Set "false" to disable.
     required: false
     default: 'true'
+  target-ts:
+    description: >-
+      TypeScript version the installed-tree peer scan tests peer ranges
+      against (exact version, e.g. "7.0.2"). Defaults to 7.0.2.
+    required: false
+    default: ''
+  strict-peers:
+    description: >-
+      Promote installed-tree peer findings from warning to conflict so they
+      fail mode "fail". Off by default — a bounded peer range excluding 7.x
+      proves an install-time peer conflict, not a runtime crash.
+    required: false
+    default: 'false'
+  peers:
+    description: Run the installed-tree peer scan. Set "false" to disable.
+    required: false
+    default: 'true'
 outputs:
   ts7:
     description: '"true" if the typescript dependency resolves to >= 7.0.0.'
@@ -48,6 +65,8 @@ outputs:
     description: Number of behavioural advisories (non-failing).
   notice-count:
     description: Number of TS7-ready notices (dependencies whose installed/declared version already supports TypeScript 7; non-failing).
+  peer-count:
+    description: Number of installed-tree peer findings (installed packages whose bounded peerDependencies.typescript range excludes the target TypeScript version).
   shim-detected:
     description: '"true" when the @typescript/typescript6 TS6 API shim is present (plain dependency or npm: alias layout).'
   status:

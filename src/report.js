@@ -19,6 +19,18 @@ function depSeverity(conf, result) {
   return conf.severity || (result.ts7 ? 'conflict' : 'warning');
 }
 
+/** One finding line for the installed-tree peer scan. */
+function peerText(p) {
+  const label = p.severity === 'conflict' ? 'CONFLICT' : 'WARNING';
+  const opt = p.optional
+    ? ' (optional peer — lower confidence; an optional peer does not always block an install)'
+    : '';
+  return `${label}: ${p.pkg}${p.version ? ` ${p.version}` : ''} — declares peerDependencies.typescript "${p.range}", which excludes ${p.target}${opt}`;
+}
+
+const PEER_NOT_RUN =
+  '[installed tree]  not run — no node_modules found; run npm install for full coverage';
+
 /** One NOTICE line for a TS7-ready dependency. */
 function noticeText(n) {
   const meta = [];
@@ -77,11 +89,15 @@ function humanReport(result, opts = {}) {
   const tsFindings = (result.tsconfig && result.tsconfig.findings) || [];
   const risks = result.risks || [];
   const notices = result.notices || [];
+  const peers = result.peerFindings || [];
+  const peerScan = result.peerScan || null;
+  const peerNotRun = !!(peerScan && !peerScan.disabled && !peerScan.ran);
   const nothing =
     result.conflicts.length === 0 &&
     tsFindings.length === 0 &&
     risks.length === 0 &&
-    notices.length === 0;
+    notices.length === 0 &&
+    peers.length === 0;
 
   if (result.tsconfig && result.tsconfig.parseError) {
     lines.push('  ' + c.yellow(`tsconfig.json: could not parse (${result.tsconfig.parseError})`));
@@ -90,6 +106,11 @@ function humanReport(result, opts = {}) {
   if (nothing) {
     lines.push('');
     lines.push(c.green('  ✓ No TypeScript 7.0 / tsgo readiness issues found.'));
+    // Never an empty pass: an unscanned installed tree is a coverage gap, not a
+    // clean result.
+    if (peerNotRun) {
+      lines.push('  ' + c.yellow(PEER_NOT_RUN));
+    }
     appendStaleDb(lines, result, c);
     appendIgnored(lines, result, c);
     return lines;
@@ -137,6 +158,18 @@ function humanReport(result, opts = {}) {
     }
   }
 
+  // ---- installed tree (generic peer pillar) ----
+  if (peers.length > 0) {
+    lines.push('');
+    lines.push(c.bold('  [installed tree]') + c.dim(`  (target: typescript ${peerScan ? peerScan.target : ''})`));
+    for (const p of peers) {
+      lines.push('  ' + (p.severity === 'conflict' ? c.red(peerText(p)) : c.yellow(peerText(p))));
+    }
+  } else if (peerNotRun) {
+    lines.push('');
+    lines.push('  ' + c.yellow(PEER_NOT_RUN));
+  }
+
   // ---- tsconfig ----
   if (tsFindings.length > 0) {
     lines.push('');
@@ -173,8 +206,11 @@ function humanReport(result, opts = {}) {
   if (result.noticeCount > 0) parts.push(`${result.noticeCount} notice(s)`);
   if (result.advisoryCount > 0) parts.push(`${result.advisoryCount} advisory(ies)`);
   const summary = `  ${parts.join(' · ')}`;
+  const peerWarnings = peers.filter((p) => p.severity === 'warning').length;
   if (result.hasActiveConflict) {
     lines.push(c.red(summary + ' — type-checking/builds will break under TypeScript 7.0.'));
+  } else if (peerWarnings > 0 && result.warningCount === peerWarnings) {
+    lines.push(c.yellow(summary + ' — these will not resolve against TypeScript 7.'));
   } else if (result.warningCount > 0 && result.shim && result.shim.present) {
     lines.push(
       c.yellow(summary + ' — the TS6 API shim keeps Compiler-API tools working; nothing is build-breaking.')
@@ -250,6 +286,9 @@ function humanReportMany(agg, opts = {}) {
         lines.push('      ' + c.red(`CONFLICT: ${f.option} — ${f.title}`) + c.dim(` (${f.file}:${f.line})`));
         lines.push('        ' + c.yellow(`Fix: ${f.fix}`));
       }
+      for (const p of (r.peerFindings || []).filter((x) => x.severity === 'conflict')) {
+        lines.push('      ' + c.red(peerText(p)));
+      }
       for (const n of notices) lines.push('      ' + c.green(noticeText(n)));
     } else if (r.warningCount > 0) {
       lines.push('  ' + c.yellow(`○ ${rel}`) + c.dim(`  (typescript ${r.typescript.raw || 'n/a'})`) + shimNote);
@@ -266,6 +305,9 @@ function humanReportMany(agg, opts = {}) {
       }
       for (const f of tsFindings.filter((x) => x.severity === 'warning')) {
         lines.push('      ' + c.yellow(`WARNING: ${f.option} — ${f.title} (breaks on upgrade).`));
+      }
+      for (const p of r.peerFindings || []) {
+        lines.push('      ' + c.yellow(peerText(p)));
       }
       for (const n of notices) lines.push('      ' + c.green(noticeText(n)));
     } else if (risks.length > 0) {
@@ -284,10 +326,15 @@ function humanReportMany(agg, opts = {}) {
     `  ${s.packagesScanned} scanned · ` +
     `${s.activeConflictPackages} with active conflicts · ` +
     `${s.packagesWithConflicts - s.activeConflictPackages} with warnings · ` +
+    `${s.totalPeerFindings || 0} peer finding(s) · ` +
     `${s.totalNotices || 0} notice(s) · ` +
     `${s.totalAdvisories} advisory(ies) · ` +
     `${s.errors} error(s)`;
   lines.push(s.activeConflictPackages > 0 ? c.red(summaryLine) : c.green(summaryLine));
+  const peersEnabled = agg.results.some((r) => r.peerScan && !r.peerScan.disabled);
+  if (peersEnabled && !s.peerScanRan) {
+    lines.push('  ' + c.yellow(PEER_NOT_RUN));
+  }
   return lines;
 }
 
@@ -327,6 +374,24 @@ function jsonReport(result) {
       checkedAt: n.checkedAt,
       severity: 'notice',
     })),
+    peerFindingCount: result.peerFindingCount || 0,
+    peerFindings: (result.peerFindings || []).map((p) => ({
+      pkg: p.pkg,
+      version: p.version,
+      range: p.range,
+      target: p.target,
+      optional: !!p.optional,
+      severity: p.severity,
+    })),
+    peerScan: result.peerScan || {
+      ran: false,
+      disabled: false,
+      target: null,
+      treesScanned: 0,
+      packagesInspected: 0,
+      packagesWithTsPeer: 0,
+      skipped: 0,
+    },
     tsconfig: {
       present: !!(result.tsconfig && result.tsconfig.present),
       path: result.tsconfig ? result.tsconfig.path : null,
@@ -394,4 +459,4 @@ function makeColors(enabled) {
   };
 }
 
-module.exports = { humanReport, humanReportMany, jsonReport, jsonReportMany, statusOf };
+module.exports = { humanReport, humanReportMany, jsonReport, jsonReportMany, statusOf, peerText };

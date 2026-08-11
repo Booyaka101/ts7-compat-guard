@@ -22,6 +22,15 @@ const SHIM_PACKAGE = '@typescript/typescript6';
 const SHIM_HELP_URI = 'https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/';
 const STALE_DB_DAYS = 60;
 
+// Default TypeScript version the installed-tree peer scan tests ranges against:
+// the npm dist-tag `latest` as of 2026-08-11. Overridable with --target-ts.
+const DEFAULT_TS_TARGET = '7.0.2';
+// A version far above anything real: a range that admits it has no upper bound.
+// (Same probe as db --check — the bounded-range doctrine has one definition.)
+const UNBOUNDED_PROBE = '9999.9999.9999';
+// How many nested node_modules levels the installed-tree scan descends.
+const PEER_SCAN_MAX_DEPTH = 6;
+
 const DEP_FIELDS = [
   'dependencies',
   'devDependencies',
@@ -160,6 +169,173 @@ function resolveEffectiveVersion(name, declaredSpec, dirs) {
     /* non-semver spec */
   }
   return { version: null, source: null };
+}
+
+/**
+ * True when `range` admits versions without an upper bound ('*', '>=4.8.4',
+ * 'any'). Mirrors db --check's rule: an unbounded range is never evidence of
+ * anything — it admits every future major trivially.
+ */
+function isUnboundedRange(range) {
+  try {
+    return semver.satisfies(UNBOUNDED_PROBE, range);
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * The generic installed-tree pillar (v3.1). Enumerates every
+ * node_modules/<pkg>/package.json (scoped, nested, and pnpm's .pnpm store),
+ * reads `peerDependencies.typescript`, and reports each package whose BOUNDED
+ * peer range excludes `targetVersion`. The bounded-range doctrine from
+ * db --check applies per-range: an unbounded range ('*', '>=4.8.4') admits the
+ * target trivially or proves nothing, and never produces a finding. This
+ * catches transitive dependencies and packages the curated ledger has never
+ * heard of — a bounded range excluding 7.x is a *published fact* about an
+ * install-time peer conflict, not a guess.
+ *
+ * Depth-bounded, symlink-loop-safe (every package dir is realpath'd once, which
+ * also dedupes pnpm's symlinked layout against its .pnpm store). Malformed or
+ * unreadable manifests are skipped and counted. `typescript` itself and the
+ * TS6 API shim are excluded.
+ *
+ * @param {string[]} nodeModulesDirs directories that may contain a node_modules
+ * @param {string} [targetVersion] exact version to test ranges against (default 7.0.2)
+ * @param {object} [opts]
+ * @param {Set<string>} [opts.seen] shared realpath set (dedupes across packages in a monorepo scan)
+ * @param {number} [opts.maxDepth] nested node_modules depth bound
+ * @returns {{ ran: boolean, target: string, findings: Array, treesScanned: number,
+ *             packagesInspected: number, packagesWithTsPeer: number, skipped: number }}
+ */
+function scanInstalledPeers(nodeModulesDirs, targetVersion, opts = {}) {
+  const target = String(targetVersion == null ? DEFAULT_TS_TARGET : targetVersion).trim();
+  if (!semver.valid(target)) {
+    const err = new Error(`invalid target TypeScript version "${target}" — must be an exact semver version like 7.0.2`);
+    err.code = 'EBADTARGET';
+    throw err;
+  }
+  const maxDepth = opts.maxDepth == null ? PEER_SCAN_MAX_DEPTH : opts.maxDepth;
+  const seen = opts.seen || new Set();
+  const byKey = new Set();
+  const findings = [];
+  const stats = { treesScanned: 0, packagesInspected: 0, packagesWithTsPeer: 0, skipped: 0 };
+
+  const isDirLike = (e) => e.isDirectory() || e.isSymbolicLink();
+
+  const inspect = (manifest) => {
+    const name = typeof manifest.name === 'string' && manifest.name ? manifest.name : null;
+    if (name === null) return;
+    // The compiler itself and the TS6 API shim are the *subjects* of the
+    // check, not consumers of it (this also catches aliased installs, whose
+    // manifest keeps the real name).
+    if (name === 'typescript' || name === SHIM_PACKAGE) return;
+    stats.packagesInspected++;
+    const pd = manifest.peerDependencies;
+    const range = pd && typeof pd === 'object' && typeof pd.typescript === 'string' ? pd.typescript : null;
+    if (range == null) return;
+    stats.packagesWithTsPeer++;
+    let excludes;
+    try {
+      excludes = !semver.satisfies(target, range, { includePrerelease: true });
+    } catch (_) {
+      return; // unparseable range proves nothing
+    }
+    if (!excludes) return;
+    if (isUnboundedRange(range)) return; // unbounded: never evidence
+    const version = typeof manifest.version === 'string' && semver.valid(manifest.version) ? manifest.version : null;
+    const key = `${name}@${version || '?'}`;
+    if (byKey.has(key)) return;
+    byKey.add(key);
+    const meta = manifest.peerDependenciesMeta;
+    const optional = !!(meta && meta.typescript && meta.typescript.optional === true);
+    findings.push({ pkg: name, version, range, optional, target });
+  };
+
+  const visitPackage = (pkgDir, depth) => {
+    let real;
+    try {
+      real = fs.realpathSync(pkgDir);
+    } catch (_) {
+      return; // dangling symlink
+    }
+    if (seen.has(real)) return; // symlink loop / pnpm alias / already scanned
+    seen.add(real);
+    const manifestPath = path.join(pkgDir, 'package.json');
+    if (fs.existsSync(manifestPath)) {
+      try {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        if (manifest && typeof manifest === 'object' && !Array.isArray(manifest)) inspect(manifest);
+        else stats.skipped++;
+      } catch (_) {
+        stats.skipped++; // malformed/unreadable — skip and count
+      }
+    }
+    if (depth < maxDepth) walkNodeModules(path.join(pkgDir, 'node_modules'), depth + 1);
+  };
+
+  function walkNodeModules(nmDir, depth) {
+    let entries;
+    try {
+      entries = fs.readdirSync(nmDir, { withFileTypes: true });
+    } catch (_) {
+      return;
+    }
+    for (const e of entries) {
+      if (!isDirLike(e)) continue;
+      if (e.name === '.pnpm') {
+        // pnpm virtual store: .pnpm/<pkg>@<ver>/node_modules/<pkg>. The
+        // top-level symlinks resolve to the same realpaths, so nothing is
+        // reported twice.
+        if (depth >= maxDepth) continue;
+        let stores;
+        try {
+          stores = fs.readdirSync(path.join(nmDir, '.pnpm'), { withFileTypes: true });
+        } catch (_) {
+          continue;
+        }
+        for (const s of stores) {
+          if (isDirLike(s)) walkNodeModules(path.join(nmDir, '.pnpm', s.name, 'node_modules'), depth + 1);
+        }
+        continue;
+      }
+      if (e.name.startsWith('.')) continue; // .bin, .cache, ...
+      if (e.name.startsWith('@')) {
+        let scoped;
+        try {
+          scoped = fs.readdirSync(path.join(nmDir, e.name), { withFileTypes: true });
+        } catch (_) {
+          continue;
+        }
+        for (const s of scoped) {
+          if (isDirLike(s)) visitPackage(path.join(nmDir, e.name, s.name), depth);
+        }
+      } else {
+        visitPackage(path.join(nmDir, e.name), depth);
+      }
+    }
+  }
+
+  let ran = false;
+  for (const dir of nodeModulesDirs || []) {
+    if (!dir) continue;
+    const nm = path.join(dir, 'node_modules');
+    let st;
+    try {
+      st = fs.statSync(nm);
+    } catch (_) {
+      continue;
+    }
+    if (!st.isDirectory()) continue;
+    ran = true;
+    stats.treesScanned++;
+    walkNodeModules(nm, 0);
+  }
+
+  findings.sort(
+    (a, b) => a.pkg.localeCompare(b.pkg) || String(a.version).localeCompare(String(b.version))
+  );
+  return Object.assign({ ran, target, findings }, stats);
 }
 
 /**
@@ -358,6 +534,50 @@ function analyze(pkg, opts = {}) {
   notices.sort((a, b) => a.pkg.localeCompare(b.pkg));
   ignored.sort((a, b) => a.pkg.localeCompare(b.pkg));
 
+  // ---- installed-tree peer scan (the generic pillar, v3.1) ----
+  // Precedence is per-FINDING, not per-name: a package the curated pillar
+  // actually reported above (conflict, notice, or ignored) keeps its ledger
+  // entry; a ledger package that is only installed transitively never reaches
+  // the curated loop (deps = direct manifest deps), so the generic pillar must
+  // still report it.
+  let peerScan = {
+    ran: false,
+    disabled: opts.peers === false,
+    target: null,
+    treesScanned: 0,
+    packagesInspected: 0,
+    packagesWithTsPeer: 0,
+    skipped: 0,
+  };
+  const peerFindings = [];
+  if (opts.peers !== false) {
+    const scan = scanInstalledPeers(nmDirs, opts.targetTs, { seen: opts.peerSeen });
+    peerScan = {
+      ran: scan.ran,
+      disabled: false,
+      target: scan.target,
+      treesScanned: scan.treesScanned,
+      packagesInspected: scan.packagesInspected,
+      packagesWithTsPeer: scan.packagesWithTsPeer,
+      skipped: scan.skipped,
+    };
+    const curated = new Set(
+      conflicts.map((e) => e.pkg).concat(notices.map((e) => e.pkg), ignored.map((e) => e.pkg))
+    );
+    for (const f of scan.findings) {
+      if (curated.has(f.pkg)) continue;
+      if (ignore.has(f.pkg)) continue;
+      peerFindings.push(
+        Object.assign({}, f, {
+          // A bounded peer range excluding the target proves an install-time
+          // peer conflict, not a runtime crash (pnpm/yarn/--legacy-peer-deps
+          // install through it) — warning by default, conflict on --strict-peers.
+          severity: opts.strictPeers ? 'conflict' : 'warning',
+        })
+      );
+    }
+  }
+
   const result = {
     ts7,
     typescript: {
@@ -382,6 +602,8 @@ function analyze(pkg, opts = {}) {
     conflicts,
     notices,
     ignored,
+    peerFindings,
+    peerScan,
     name: pkg.name,
     tsconfig: { present: false, path: null, absPath: null, findings: [], parseError: null, unresolvedExtends: [] },
     risks: [],
@@ -414,13 +636,19 @@ function finalize(result) {
   // partial-support warnings); entries without one (extraDb merged through
   // analyze() keeps them stamped) default to the pre-v3 ts7 rule.
   const sev = (c) => c.severity || (result.ts7 ? 'conflict' : 'warning');
+  const peers = result.peerFindings || [];
   const activeDep = result.conflicts.filter((c) => sev(c) === 'conflict').length;
   const activeTsconfig = tsFindings.filter((f) => f.severity === 'conflict').length;
-  result.activeConflictCount = activeDep + activeTsconfig;
+  // Peer findings are warnings by default and only 'conflict' under
+  // --strict-peers — the opt-in that makes them fail --mode fail.
+  const activePeer = peers.filter((p) => p.severity === 'conflict').length;
+  result.activeConflictCount = activeDep + activeTsconfig + activePeer;
   result.hasActiveConflict = result.activeConflictCount > 0;
   result.warningCount =
     result.conflicts.filter((c) => sev(c) === 'warning').length +
-    tsFindings.filter((f) => f.severity === 'warning').length;
+    tsFindings.filter((f) => f.severity === 'warning').length +
+    peers.filter((p) => p.severity === 'warning').length;
+  result.peerFindingCount = peers.length;
   result.noticeCount = (result.notices || []).length;
   result.advisoryCount = (result.risks || []).length;
   return result;
@@ -508,6 +736,12 @@ function findPackageDirs(root, opts = {}) {
  */
 function analyzeMany(dirs, opts = {}) {
   const results = [];
+  // One shared realpath set: monorepo packages share the hoisted root
+  // node_modules, and each installed package should be reported exactly once
+  // (attributed to the first package whose scan reaches it).
+  if (opts.peers !== false && !opts.peerSeen) {
+    opts = Object.assign({}, opts, { peerSeen: new Set() });
+  }
   for (const dir of dirs) {
     try {
       results.push(analyzeDir(dir, opts));
@@ -519,11 +753,19 @@ function analyzeMany(dirs, opts = {}) {
   const summary = {
     packagesScanned: results.length,
     packagesWithConflicts: results.filter(
-      (r) => (r.conflicts && r.conflicts.length > 0) || tsFindings(r).length > 0
+      (r) =>
+        (r.conflicts && r.conflicts.length > 0) ||
+        tsFindings(r).length > 0 ||
+        (r.peerFindings && r.peerFindings.length > 0)
     ).length,
     activeConflictPackages: results.filter((r) => r.hasActiveConflict).length,
     totalConflicts: results.reduce((n, r) => n + (r.conflicts ? r.conflicts.length : 0), 0),
     totalTsconfigFindings: results.reduce((n, r) => n + tsFindings(r).length, 0),
+    totalPeerFindings: results.reduce(
+      (n, r) => n + ((r.peerFindings && r.peerFindings.length) || 0),
+      0
+    ),
+    peerScanRan: results.some((r) => r.peerScan && r.peerScan.ran),
     totalAdvisories: results.reduce((n, r) => n + ((r.risks && r.risks.length) || 0), 0),
     totalNotices: results.reduce((n, r) => n + ((r.notices && r.notices.length) || 0), 0),
     shimDetected: results.some((r) => r.shim && r.shim.present),
@@ -565,6 +807,9 @@ module.exports = {
   analyzeTypescriptVersion,
   detectShim,
   detectTs7Alias,
+  scanInstalledPeers,
+  isUnboundedRange,
+  DEFAULT_TS_TARGET,
   resolveEffectiveVersion,
   getTypescriptSpec,
   readOverrideTypescript,

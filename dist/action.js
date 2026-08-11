@@ -2693,6 +2693,9 @@ var require_core = __commonJS({
     var SHIM_PACKAGE = "@typescript/typescript6";
     var SHIM_HELP_URI = "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/";
     var STALE_DB_DAYS = 60;
+    var DEFAULT_TS_TARGET = "7.0.2";
+    var UNBOUNDED_PROBE = "9999.9999.9999";
+    var PEER_SCAN_MAX_DEPTH = 6;
     var DEP_FIELDS = [
       "dependencies",
       "devDependencies",
@@ -2778,6 +2781,130 @@ var require_core = __commonJS({
       } catch (_) {
       }
       return { version: null, source: null };
+    }
+    function isUnboundedRange(range) {
+      try {
+        return semver.satisfies(UNBOUNDED_PROBE, range);
+      } catch (_) {
+        return false;
+      }
+    }
+    function scanInstalledPeers(nodeModulesDirs, targetVersion, opts = {}) {
+      const target = String(targetVersion == null ? DEFAULT_TS_TARGET : targetVersion).trim();
+      if (!semver.valid(target)) {
+        const err = new Error(`invalid target TypeScript version "${target}" \u2014 must be an exact semver version like 7.0.2`);
+        err.code = "EBADTARGET";
+        throw err;
+      }
+      const maxDepth = opts.maxDepth == null ? PEER_SCAN_MAX_DEPTH : opts.maxDepth;
+      const seen = opts.seen || /* @__PURE__ */ new Set();
+      const byKey = /* @__PURE__ */ new Set();
+      const findings = [];
+      const stats = { treesScanned: 0, packagesInspected: 0, packagesWithTsPeer: 0, skipped: 0 };
+      const isDirLike = (e) => e.isDirectory() || e.isSymbolicLink();
+      const inspect = (manifest) => {
+        const name = typeof manifest.name === "string" && manifest.name ? manifest.name : null;
+        if (name === null) return;
+        if (name === "typescript" || name === SHIM_PACKAGE) return;
+        stats.packagesInspected++;
+        const pd = manifest.peerDependencies;
+        const range = pd && typeof pd === "object" && typeof pd.typescript === "string" ? pd.typescript : null;
+        if (range == null) return;
+        stats.packagesWithTsPeer++;
+        let excludes;
+        try {
+          excludes = !semver.satisfies(target, range, { includePrerelease: true });
+        } catch (_) {
+          return;
+        }
+        if (!excludes) return;
+        if (isUnboundedRange(range)) return;
+        const version = typeof manifest.version === "string" && semver.valid(manifest.version) ? manifest.version : null;
+        const key = `${name}@${version || "?"}`;
+        if (byKey.has(key)) return;
+        byKey.add(key);
+        const meta = manifest.peerDependenciesMeta;
+        const optional = !!(meta && meta.typescript && meta.typescript.optional === true);
+        findings.push({ pkg: name, version, range, optional, target });
+      };
+      const visitPackage = (pkgDir, depth) => {
+        let real;
+        try {
+          real = fs2.realpathSync(pkgDir);
+        } catch (_) {
+          return;
+        }
+        if (seen.has(real)) return;
+        seen.add(real);
+        const manifestPath = path2.join(pkgDir, "package.json");
+        if (fs2.existsSync(manifestPath)) {
+          try {
+            const manifest = JSON.parse(fs2.readFileSync(manifestPath, "utf8"));
+            if (manifest && typeof manifest === "object" && !Array.isArray(manifest)) inspect(manifest);
+            else stats.skipped++;
+          } catch (_) {
+            stats.skipped++;
+          }
+        }
+        if (depth < maxDepth) walkNodeModules(path2.join(pkgDir, "node_modules"), depth + 1);
+      };
+      function walkNodeModules(nmDir, depth) {
+        let entries;
+        try {
+          entries = fs2.readdirSync(nmDir, { withFileTypes: true });
+        } catch (_) {
+          return;
+        }
+        for (const e of entries) {
+          if (!isDirLike(e)) continue;
+          if (e.name === ".pnpm") {
+            if (depth >= maxDepth) continue;
+            let stores;
+            try {
+              stores = fs2.readdirSync(path2.join(nmDir, ".pnpm"), { withFileTypes: true });
+            } catch (_) {
+              continue;
+            }
+            for (const s of stores) {
+              if (isDirLike(s)) walkNodeModules(path2.join(nmDir, ".pnpm", s.name, "node_modules"), depth + 1);
+            }
+            continue;
+          }
+          if (e.name.startsWith(".")) continue;
+          if (e.name.startsWith("@")) {
+            let scoped;
+            try {
+              scoped = fs2.readdirSync(path2.join(nmDir, e.name), { withFileTypes: true });
+            } catch (_) {
+              continue;
+            }
+            for (const s of scoped) {
+              if (isDirLike(s)) visitPackage(path2.join(nmDir, e.name, s.name), depth);
+            }
+          } else {
+            visitPackage(path2.join(nmDir, e.name), depth);
+          }
+        }
+      }
+      let ran = false;
+      for (const dir of nodeModulesDirs || []) {
+        if (!dir) continue;
+        const nm = path2.join(dir, "node_modules");
+        let st;
+        try {
+          st = fs2.statSync(nm);
+        } catch (_) {
+          continue;
+        }
+        if (!st.isDirectory()) continue;
+        ran = true;
+        stats.treesScanned++;
+        walkNodeModules(nm, 0);
+      }
+      findings.sort(
+        (a, b) => a.pkg.localeCompare(b.pkg) || String(a.version).localeCompare(String(b.version))
+      );
+      return Object.assign({ ran, target, findings }, stats);
     }
     function readOverrideTypescript(pkg) {
       const sources = [
@@ -2922,6 +3049,43 @@ var require_core = __commonJS({
       conflicts.sort((a, b) => a.pkg.localeCompare(b.pkg));
       notices.sort((a, b) => a.pkg.localeCompare(b.pkg));
       ignored.sort((a, b) => a.pkg.localeCompare(b.pkg));
+      let peerScan = {
+        ran: false,
+        disabled: opts.peers === false,
+        target: null,
+        treesScanned: 0,
+        packagesInspected: 0,
+        packagesWithTsPeer: 0,
+        skipped: 0
+      };
+      const peerFindings = [];
+      if (opts.peers !== false) {
+        const scan = scanInstalledPeers(nmDirs, opts.targetTs, { seen: opts.peerSeen });
+        peerScan = {
+          ran: scan.ran,
+          disabled: false,
+          target: scan.target,
+          treesScanned: scan.treesScanned,
+          packagesInspected: scan.packagesInspected,
+          packagesWithTsPeer: scan.packagesWithTsPeer,
+          skipped: scan.skipped
+        };
+        const curated = new Set(
+          conflicts.map((e) => e.pkg).concat(notices.map((e) => e.pkg), ignored.map((e) => e.pkg))
+        );
+        for (const f of scan.findings) {
+          if (curated.has(f.pkg)) continue;
+          if (ignore.has(f.pkg)) continue;
+          peerFindings.push(
+            Object.assign({}, f, {
+              // A bounded peer range excluding the target proves an install-time
+              // peer conflict, not a runtime crash (pnpm/yarn/--legacy-peer-deps
+              // install through it) — warning by default, conflict on --strict-peers.
+              severity: opts.strictPeers ? "conflict" : "warning"
+            })
+          );
+        }
+      }
       const result = {
         ts7,
         typescript: {
@@ -2944,6 +3108,8 @@ var require_core = __commonJS({
         conflicts,
         notices,
         ignored,
+        peerFindings,
+        peerScan,
         name: pkg.name,
         tsconfig: { present: false, path: null, absPath: null, findings: [], parseError: null, unresolvedExtends: [] },
         risks: []
@@ -2960,11 +3126,14 @@ var require_core = __commonJS({
     function finalize(result) {
       const tsFindings = result.tsconfig && result.tsconfig.findings || [];
       const sev = (c) => c.severity || (result.ts7 ? "conflict" : "warning");
+      const peers = result.peerFindings || [];
       const activeDep = result.conflicts.filter((c) => sev(c) === "conflict").length;
       const activeTsconfig = tsFindings.filter((f) => f.severity === "conflict").length;
-      result.activeConflictCount = activeDep + activeTsconfig;
+      const activePeer = peers.filter((p) => p.severity === "conflict").length;
+      result.activeConflictCount = activeDep + activeTsconfig + activePeer;
       result.hasActiveConflict = result.activeConflictCount > 0;
-      result.warningCount = result.conflicts.filter((c) => sev(c) === "warning").length + tsFindings.filter((f) => f.severity === "warning").length;
+      result.warningCount = result.conflicts.filter((c) => sev(c) === "warning").length + tsFindings.filter((f) => f.severity === "warning").length + peers.filter((p) => p.severity === "warning").length;
+      result.peerFindingCount = peers.length;
       result.noticeCount = (result.notices || []).length;
       result.advisoryCount = (result.risks || []).length;
       return result;
@@ -3032,6 +3201,9 @@ var require_core = __commonJS({
     }
     function analyzeMany(dirs, opts = {}) {
       const results = [];
+      if (opts.peers !== false && !opts.peerSeen) {
+        opts = Object.assign({}, opts, { peerSeen: /* @__PURE__ */ new Set() });
+      }
       for (const dir of dirs) {
         try {
           results.push(analyzeDir(dir, opts));
@@ -3043,11 +3215,16 @@ var require_core = __commonJS({
       const summary = {
         packagesScanned: results.length,
         packagesWithConflicts: results.filter(
-          (r) => r.conflicts && r.conflicts.length > 0 || tsFindings(r).length > 0
+          (r) => r.conflicts && r.conflicts.length > 0 || tsFindings(r).length > 0 || r.peerFindings && r.peerFindings.length > 0
         ).length,
         activeConflictPackages: results.filter((r) => r.hasActiveConflict).length,
         totalConflicts: results.reduce((n, r) => n + (r.conflicts ? r.conflicts.length : 0), 0),
         totalTsconfigFindings: results.reduce((n, r) => n + tsFindings(r).length, 0),
+        totalPeerFindings: results.reduce(
+          (n, r) => n + (r.peerFindings && r.peerFindings.length || 0),
+          0
+        ),
+        peerScanRan: results.some((r) => r.peerScan && r.peerScan.ran),
         totalAdvisories: results.reduce((n, r) => n + (r.risks && r.risks.length || 0), 0),
         totalNotices: results.reduce((n, r) => n + (r.notices && r.notices.length || 0), 0),
         shimDetected: results.some((r) => r.shim && r.shim.present),
@@ -3079,6 +3256,9 @@ var require_core = __commonJS({
       analyzeTypescriptVersion,
       detectShim,
       detectTs7Alias,
+      scanInstalledPeers,
+      isUnboundedRange,
+      DEFAULT_TS_TARGET,
       resolveEffectiveVersion,
       getTypescriptSpec,
       readOverrideTypescript,
@@ -3108,6 +3288,12 @@ var require_report = __commonJS({
     function depSeverity(conf, result) {
       return conf.severity || (result.ts7 ? "conflict" : "warning");
     }
+    function peerText2(p) {
+      const label = p.severity === "conflict" ? "CONFLICT" : "WARNING";
+      const opt = p.optional ? " (optional peer \u2014 lower confidence; an optional peer does not always block an install)" : "";
+      return `${label}: ${p.pkg}${p.version ? ` ${p.version}` : ""} \u2014 declares peerDependencies.typescript "${p.range}", which excludes ${p.target}${opt}`;
+    }
+    var PEER_NOT_RUN = "[installed tree]  not run \u2014 no node_modules found; run npm install for full coverage";
     function noticeText(n) {
       const meta = [];
       if (n.source) meta.push(`source: ${n.source}`);
@@ -3149,13 +3335,19 @@ var require_report = __commonJS({
       const tsFindings = result.tsconfig && result.tsconfig.findings || [];
       const risks = result.risks || [];
       const notices = result.notices || [];
-      const nothing = result.conflicts.length === 0 && tsFindings.length === 0 && risks.length === 0 && notices.length === 0;
+      const peers = result.peerFindings || [];
+      const peerScan = result.peerScan || null;
+      const peerNotRun = !!(peerScan && !peerScan.disabled && !peerScan.ran);
+      const nothing = result.conflicts.length === 0 && tsFindings.length === 0 && risks.length === 0 && notices.length === 0 && peers.length === 0;
       if (result.tsconfig && result.tsconfig.parseError) {
         lines.push("  " + c.yellow(`tsconfig.json: could not parse (${result.tsconfig.parseError})`));
       }
       if (nothing) {
         lines.push("");
         lines.push(c.green("  \u2713 No TypeScript 7.0 / tsgo readiness issues found."));
+        if (peerNotRun) {
+          lines.push("  " + c.yellow(PEER_NOT_RUN));
+        }
         appendStaleDb(lines, result, c);
         appendIgnored(lines, result, c);
         return lines;
@@ -3197,6 +3389,16 @@ var require_report = __commonJS({
           lines.push("  " + c.green(noticeText(n)));
         }
       }
+      if (peers.length > 0) {
+        lines.push("");
+        lines.push(c.bold("  [installed tree]") + c.dim(`  (target: typescript ${peerScan ? peerScan.target : ""})`));
+        for (const p of peers) {
+          lines.push("  " + (p.severity === "conflict" ? c.red(peerText2(p)) : c.yellow(peerText2(p))));
+        }
+      } else if (peerNotRun) {
+        lines.push("");
+        lines.push("  " + c.yellow(PEER_NOT_RUN));
+      }
       if (tsFindings.length > 0) {
         lines.push("");
         lines.push(c.bold("  [tsconfig.json]"));
@@ -3228,8 +3430,11 @@ var require_report = __commonJS({
       if (result.noticeCount > 0) parts.push(`${result.noticeCount} notice(s)`);
       if (result.advisoryCount > 0) parts.push(`${result.advisoryCount} advisory(ies)`);
       const summary = `  ${parts.join(" \xB7 ")}`;
+      const peerWarnings = peers.filter((p) => p.severity === "warning").length;
       if (result.hasActiveConflict) {
         lines.push(c.red(summary + " \u2014 type-checking/builds will break under TypeScript 7.0."));
+      } else if (peerWarnings > 0 && result.warningCount === peerWarnings) {
+        lines.push(c.yellow(summary + " \u2014 these will not resolve against TypeScript 7."));
       } else if (result.warningCount > 0 && result.shim && result.shim.present) {
         lines.push(
           c.yellow(summary + " \u2014 the TS6 API shim keeps Compiler-API tools working; nothing is build-breaking.")
@@ -3295,6 +3500,9 @@ var require_report = __commonJS({
             lines.push("      " + c.red(`CONFLICT: ${f.option} \u2014 ${f.title}`) + c.dim(` (${f.file}:${f.line})`));
             lines.push("        " + c.yellow(`Fix: ${f.fix}`));
           }
+          for (const p of (r.peerFindings || []).filter((x) => x.severity === "conflict")) {
+            lines.push("      " + c.red(peerText2(p)));
+          }
           for (const n of notices) lines.push("      " + c.green(noticeText(n)));
         } else if (r.warningCount > 0) {
           lines.push("  " + c.yellow(`\u25CB ${rel}`) + c.dim(`  (typescript ${r.typescript.raw || "n/a"})`) + shimNote);
@@ -3312,6 +3520,9 @@ var require_report = __commonJS({
           for (const f of tsFindings.filter((x) => x.severity === "warning")) {
             lines.push("      " + c.yellow(`WARNING: ${f.option} \u2014 ${f.title} (breaks on upgrade).`));
           }
+          for (const p of r.peerFindings || []) {
+            lines.push("      " + c.yellow(peerText2(p)));
+          }
           for (const n of notices) lines.push("      " + c.green(noticeText(n)));
         } else if (risks.length > 0) {
           lines.push("  " + c.cyan(`\u25CD ${rel}`) + c.dim(`  (${risks.length} advisory(ies))`) + shimNote);
@@ -3324,8 +3535,12 @@ var require_report = __commonJS({
       }
       lines.push("");
       const s = agg.summary;
-      const summaryLine = `  ${s.packagesScanned} scanned \xB7 ${s.activeConflictPackages} with active conflicts \xB7 ${s.packagesWithConflicts - s.activeConflictPackages} with warnings \xB7 ${s.totalNotices || 0} notice(s) \xB7 ${s.totalAdvisories} advisory(ies) \xB7 ${s.errors} error(s)`;
+      const summaryLine = `  ${s.packagesScanned} scanned \xB7 ${s.activeConflictPackages} with active conflicts \xB7 ${s.packagesWithConflicts - s.activeConflictPackages} with warnings \xB7 ${s.totalPeerFindings || 0} peer finding(s) \xB7 ${s.totalNotices || 0} notice(s) \xB7 ${s.totalAdvisories} advisory(ies) \xB7 ${s.errors} error(s)`;
       lines.push(s.activeConflictPackages > 0 ? c.red(summaryLine) : c.green(summaryLine));
+      const peersEnabled = agg.results.some((r) => r.peerScan && !r.peerScan.disabled);
+      if (peersEnabled && !s.peerScanRan) {
+        lines.push("  " + c.yellow(PEER_NOT_RUN));
+      }
       return lines;
     }
     function jsonReport2(result) {
@@ -3363,6 +3578,24 @@ var require_report = __commonJS({
           checkedAt: n.checkedAt,
           severity: "notice"
         })),
+        peerFindingCount: result.peerFindingCount || 0,
+        peerFindings: (result.peerFindings || []).map((p) => ({
+          pkg: p.pkg,
+          version: p.version,
+          range: p.range,
+          target: p.target,
+          optional: !!p.optional,
+          severity: p.severity
+        })),
+        peerScan: result.peerScan || {
+          ran: false,
+          disabled: false,
+          target: null,
+          treesScanned: 0,
+          packagesInspected: 0,
+          packagesWithTsPeer: 0,
+          skipped: 0
+        },
         tsconfig: {
           present: !!(result.tsconfig && result.tsconfig.present),
           path: result.tsconfig ? result.tsconfig.path : null,
@@ -3425,7 +3658,7 @@ var require_report = __commonJS({
         cyan: wrap(36, 39)
       };
     }
-    module2.exports = { humanReport: humanReport2, humanReportMany: humanReportMany2, jsonReport: jsonReport2, jsonReportMany: jsonReportMany2, statusOf };
+    module2.exports = { humanReport: humanReport2, humanReportMany: humanReportMany2, jsonReport: jsonReport2, jsonReportMany: jsonReportMany2, statusOf, peerText: peerText2 };
   }
 });
 
@@ -3517,6 +3750,35 @@ var require_sarif = __commonJS({
             partialFingerprints: { ts7CompatGuard: `${pkgUri}::ready::${n.pkg}` }
           });
         }
+        for (const p of r.peerFindings || []) {
+          const ruleId = `ts7-compat/peer/${p.pkg}`;
+          const level = p.severity === "conflict" ? "error" : "warning";
+          ensureRule({
+            id: ruleId,
+            name: `TS7Peer_${sanitize(p.pkg)}`,
+            shortDescription: {
+              text: `${p.pkg} declares a typescript peer range that excludes ${p.target}`
+            },
+            fullDescription: {
+              text: `An installed copy of ${p.pkg} declares peerDependencies.typescript "${p.range}", a bounded range that excludes TypeScript ${p.target} \u2014 it will not resolve against TypeScript 7 at install time.`
+            },
+            helpUri: DEP_HELP,
+            help: {
+              text: `Upgrade ${p.pkg} to a release whose typescript peer range admits ${p.target}, or keep typescript pinned below 7 until it exists.`
+            },
+            defaultConfiguration: { level: "warning" },
+            properties: { tags: ["typescript", "typescript-7", "tsgo", "peer-dependency", "installed-tree"] }
+          });
+          sarifResults.push({
+            ruleId,
+            level,
+            message: {
+              text: `${p.severity === "conflict" ? "CONFLICT" : "WARNING"}: ${p.pkg}${p.version ? ` ${p.version}` : ""} \u2014 declares peerDependencies.typescript "${p.range}", which excludes ${p.target}${p.optional ? " (optional peer \u2014 lower confidence; an optional peer does not always block an install)" : ""}`
+            },
+            locations: [location(pkgUri, 1, 1)],
+            partialFingerprints: { ts7CompatGuard: `${pkgUri}::peer::${p.pkg}@${p.version || "?"}` }
+          });
+        }
         const tsFindings = r.tsconfig && r.tsconfig.findings || [];
         const tsUri = r.tsconfig && r.tsconfig.absPath ? toPosix(path2.relative(root, r.tsconfig.absPath)) : toPosix(path2.relative(root, path2.join(r.dir || root, "tsconfig.json")));
         for (const f of tsFindings) {
@@ -3589,7 +3851,7 @@ var require_sarif = __commonJS({
 var path = require("node:path");
 var fs = require("node:fs");
 var core = require_core();
-var { humanReport, humanReportMany, jsonReport, jsonReportMany } = require_report();
+var { humanReport, humanReportMany, jsonReport, jsonReportMany, peerText } = require_report();
 var { buildSarif } = require_sarif();
 function getInput(name, fallback) {
   const keys = ["INPUT_" + name.toUpperCase(), "INPUT_" + name.toUpperCase().replace(/-/g, "_")];
@@ -3655,6 +3917,9 @@ function annotateConflicts(result) {
       );
     }
   }
+  for (const p of result.peerFindings || []) {
+    emit(p.severity === "conflict" ? "error" : "warning", peerText(p));
+  }
   for (const n of result.notices || []) {
     emit(
       "notice",
@@ -3690,6 +3955,14 @@ function main() {
   const sarifFile = getInput("sarif-file", null);
   const ignoreInput = getInput("ignore", "");
   const useConfig = getBoolInput("config", true);
+  const targetTs = getInput("target-ts", null);
+  const strictPeers = getBoolInput("strict-peers", false);
+  const peers = getBoolInput("peers", true);
+  if (targetTs != null && !require_semver2().valid(String(targetTs).trim())) {
+    emit("error", `ts7-compat-guard: target-ts must be an exact semver version like 7.0.2, got "${targetTs}"`);
+    process.exitCode = 1;
+    return;
+  }
   const resolvedDir = path.resolve(process.cwd(), dirInput);
   let config = {};
   try {
@@ -3704,7 +3977,7 @@ function main() {
   );
   const extraDb = config.db && typeof config.db === "object" ? config.db : {};
   const effectiveMode = mode === "warn" || mode === "fail" ? mode : config.mode || "fail";
-  const analyzeOpts = { extraDb, ignore };
+  const analyzeOpts = { extraDb, ignore, peers, strictPeers, targetTs: targetTs || void 0 };
   const version = safeVersion();
   if (recursive) {
     let dirs;
@@ -3733,14 +4006,21 @@ function main() {
     setOutput("tsconfig-count", String(agg.summary.totalTsconfigFindings));
     setOutput("advisory-count", String(agg.summary.totalAdvisories));
     setOutput("notice-count", String(agg.summary.totalNotices || 0));
+    setOutput("peer-count", String(agg.summary.totalPeerFindings || 0));
     setOutput("shim-detected", String(!!agg.summary.shimDetected));
     setOutput("status", agg.summary.activeConflictPackages > 0 ? "conflict" : agg.summary.packagesWithConflicts > 0 ? "warning" : agg.summary.totalAdvisories > 0 ? "advisory" : (agg.summary.totalNotices || 0) > 0 ? "notice" : "clean");
     setOutput("json", JSON.stringify(json2));
     staleDbNotice(agg.results.find((r) => r.dbStale && r.dbStale.stale));
+    if (peers && !agg.summary.peerScanRan) {
+      emit(
+        "notice",
+        "ts7-compat-guard: installed-tree peer scan not run \u2014 no node_modules found; run npm install for full coverage."
+      );
+    }
     appendSummary(
       `### ts7-compat-guard
 
-Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeConflictPackages}** with active conflicts, **${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings, **${agg.summary.totalNotices || 0}** notice(s), **${agg.summary.totalAdvisories}** advisory(ies)${agg.summary.shimDetected ? " \u2014 TS6 API shim detected" : ""}.`
+Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeConflictPackages}** with active conflicts, **${agg.summary.packagesWithConflicts - agg.summary.activeConflictPackages}** with warnings, **${agg.summary.totalPeerFindings || 0}** installed-tree peer finding(s), **${agg.summary.totalNotices || 0}** notice(s), **${agg.summary.totalAdvisories}** advisory(ies)${agg.summary.shimDetected ? " \u2014 TS6 API shim detected" : ""}.`
     );
     if (effectiveMode === "fail" && agg.summary.activeConflictPackages > 0) {
       emit("error", `ts7-compat-guard failed: ${agg.summary.activeConflictPackages} package(s) have active TypeScript 7.0 conflicts.`);
@@ -3766,18 +4046,25 @@ Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeCon
   setOutput("tsconfig-count", String(tsCount));
   setOutput("advisory-count", String(result.advisoryCount));
   setOutput("notice-count", String(result.noticeCount || 0));
+  setOutput("peer-count", String(result.peerFindingCount || 0));
   setOutput("shim-detected", String(!!(result.shim && result.shim.present)));
   setOutput("status", json.status);
   setOutput("json", JSON.stringify(json));
-  const anyFinding = result.conflicts.length > 0 || tsCount > 0 || result.advisoryCount > 0 || (result.noticeCount || 0) > 0 || result.shim && result.shim.present;
+  const anyFinding = result.conflicts.length > 0 || tsCount > 0 || result.advisoryCount > 0 || (result.noticeCount || 0) > 0 || (result.peerFindingCount || 0) > 0 || result.shim && result.shim.present;
   if (anyFinding) annotateConflicts(result);
   else emit("notice", "ts7-compat-guard: no TypeScript 7.0 / tsgo readiness issues found.");
+  if (result.peerScan && !result.peerScan.disabled && !result.peerScan.ran) {
+    emit(
+      "notice",
+      "ts7-compat-guard: installed-tree peer scan not run \u2014 no node_modules found; run npm install for full coverage."
+    );
+  }
   staleDbNotice(result.dbStale && result.dbStale.stale ? result : null);
   if (sarifFile) writeSarif([result], resolvedDir, version, sarifFile);
   appendSummary(
     `### ts7-compat-guard
 
-\`typescript\` ${result.typescript.raw || "n/a"} \u2192 ${result.ts7 ? "TypeScript 7.0 detected" : "TypeScript 6.x"} \xB7 **${result.activeConflictCount}** conflict(s), **${result.warningCount}** warning(s), **${result.advisoryCount}** advisory(ies) (status: ${json.status}).`
+\`typescript\` ${result.typescript.raw || "n/a"} \u2192 ${result.ts7 ? "TypeScript 7.0 detected" : "TypeScript 6.x"} \xB7 **${result.activeConflictCount}** conflict(s), **${result.warningCount}** warning(s), **${result.peerFindingCount || 0}** installed-tree peer finding(s), **${result.advisoryCount}** advisory(ies) (status: ${json.status}).`
   );
   if (effectiveMode === "fail" && result.hasActiveConflict) {
     emit("error", `ts7-compat-guard failed: ${result.activeConflictCount} build-breaking TypeScript 7.0 conflict(s) detected.`);
@@ -3805,7 +4092,7 @@ function writeSarif(results, root, version, file) {
   }
 }
 function safeVersion() {
-  if (true) return "3.0.0";
+  if (true) return "3.1.0";
   try {
     const fs2 = require("node:fs");
     const path2 = require("node:path");

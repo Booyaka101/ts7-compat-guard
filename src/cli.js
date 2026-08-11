@@ -14,11 +14,14 @@ const { buildSarif } = require('./sarif');
 
 const USAGE = `ts7-compat-guard — TypeScript 7.0 / tsgo readiness scanner
 
-Checks three things, config- and manifest-level only (no source-file scanning,
+Checks four things, config- and manifest-level only (no source-file scanning,
 so no false positives):
   1. dependencies that embed the removed programmatic Compiler API
-  2. tsconfig.json options removed in TypeScript 7.0 (with exact line numbers)
-  3. behavioural advisories (strict-by-default, emitDecoratorMetadata, …)
+  2. the installed tree: every node_modules package whose BOUNDED
+     peerDependencies.typescript range excludes the target TypeScript
+     (catches transitive deps; unbounded ranges like '*' are never evidence)
+  3. tsconfig.json options removed in TypeScript 7.0 (with exact line numbers)
+  4. behavioural advisories (strict-by-default, emitDecoratorMetadata, …)
 
 A normal scan is fully offline — it reads package.json / tsconfig.json /
 node_modules/*/package.json and never touches the network. The only network
@@ -47,6 +50,13 @@ Options:
   --ignore <list>     Comma-separated package names to exclude from conflicts
   --db <path>         Path to a JSON file of extra db entries to merge
                       ({ "pkg": { "reason", "fix" } })
+  --target-ts <v>     TypeScript version the installed-tree peer scan tests
+                      ranges against (exact version; default: 7.0.2)
+  --strict-peers      Promote installed-tree peer findings from warning to
+                      conflict (they then fail --mode fail). Off by default: a
+                      bounded peer range excluding 7.x proves an install-time
+                      peer conflict, not a runtime crash.
+  --no-peers          Skip the installed-tree peer scan
   --no-tsconfig       Skip tsconfig.json analysis (dependencies only)
   --no-config         Do not read .ts7guardrc.json
   -h, --help          Show this help
@@ -56,9 +66,11 @@ Config file (.ts7guardrc.json in --dir):
   { "ignore": ["pkg"], "db": { "pkg": {"reason","fix"} }, "mode": "warn" }
 
 Exit codes:
-  0  no build-breaking conflicts (or mode=warn). Warnings/advisories do not fail.
+  0  no build-breaking conflicts (or mode=warn). Warnings/advisories and
+     installed-tree peer findings (without --strict-peers) do not fail.
   1  a build-breaking TypeScript 7.0 conflict is present (mode=fail):
-     a Compiler-API dependency on TS7, or a removed tsconfig option on TS7
+     a Compiler-API dependency on TS7, a removed tsconfig option on TS7,
+     or an installed-tree peer finding under --strict-peers
   2  usage / runtime error (e.g. no package.json)
 `;
 
@@ -76,6 +88,9 @@ function parseArgs(argv) {
     db: null,
     config: true,
     tsconfig: true,
+    peers: true,
+    strictPeers: false,
+    targetTs: null,
     help: false,
     version: false,
   };
@@ -112,6 +127,10 @@ function parseArgs(argv) {
     else if (a.startsWith('--ignore=')) addIgnore(a.slice('--ignore='.length));
     else if (a === '--db') opts.db = takeValue(++i, '--db');
     else if (a.startsWith('--db=')) opts.db = a.slice(5);
+    else if (a === '--target-ts') opts.targetTs = takeValue(++i, '--target-ts');
+    else if (a.startsWith('--target-ts=')) opts.targetTs = a.slice('--target-ts='.length);
+    else if (a === '--strict-peers') opts.strictPeers = true;
+    else if (a === '--no-peers') opts.peers = false;
     else if (a === '--no-config') opts.config = false;
     else if (a === '--no-tsconfig') opts.tsconfig = false;
     else if (a === '-h' || a === '--help') opts.help = true;
@@ -121,6 +140,11 @@ function parseArgs(argv) {
 
   if (opts.mode !== 'fail' && opts.mode !== 'warn') {
     throw new UsageError(`--mode must be 'fail' or 'warn', got '${opts.mode}'`);
+  }
+  if (opts.targetTs != null && !require('semver').valid(String(opts.targetTs).trim())) {
+    throw new UsageError(
+      `--target-ts must be an exact semver version like 7.0.2, got '${opts.targetTs}'`
+    );
   }
   return opts;
 }
@@ -192,7 +216,14 @@ function run(argv, io = {}) {
   const mode =
     argvHasMode(argv) ? opts.mode : config.mode === 'warn' || config.mode === 'fail' ? config.mode : opts.mode;
 
-  const analyzeOpts = { extraDb, ignore, tsconfig: opts.tsconfig };
+  const analyzeOpts = {
+    extraDb,
+    ignore,
+    tsconfig: opts.tsconfig,
+    peers: opts.peers,
+    strictPeers: opts.strictPeers,
+    targetTs: opts.targetTs || undefined,
+  };
   const color = !!isTTY && !process.env.NO_COLOR;
 
   // ---- recursive ----
