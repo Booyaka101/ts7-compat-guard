@@ -1,6 +1,6 @@
 # PROGRESS — ts7-compat-guard
 
-## Status: v3.1.0 COMPLETE — installed-tree peer scan (generic second pillar), verified end-to-end. NOT yet published (owner ships from phone).
+## Status: v3.1.0 SHIPPED 2026-08-11 (owner-authorized) — npm dist-tag latest, GitHub release v3.1.0, v3 major tag moved to 27540bd, CI/Guards/self-test green on the release commit.
 
 Date: 2026-08-11 (v3.0.0 shipped 2026-07-29 — npm latest, GitHub release, announce comment; see below)
 
@@ -53,10 +53,13 @@ Plus real-input E2E: scan of cloned honojs/hono → 9 warnings incl.
   release: replace with @vue/language-core + @vue/language-server.
 - nested node_modules depth bound is 6 (PEER_SCAN_MAX_DEPTH).
 - .ts7guardrc.json does NOT carry targetTs/strictPeers (CLI/Action only).
-- Distribution (owner, from phone): `npm publish` (prepublishOnly runs
-  build+test), `git push --follow-tags`, move the v3 major tag, GitHub release.
-  Announce angle: "your lockfile already knows it won't resolve on TS7 —
-  0.64% of installed packages, 60% of real repos".
+- Distribution DONE (2026-08-11, owner-authorized): rebased onto a Dependabot
+  CI bump (5b642a2), pushed main (27540bd) + tags v3.1.0 / v3 (moved);
+  `npm publish` → ts7-compat-guard@3.1.0 is dist-tag latest (verified via
+  npm view); release https://github.com/Booyaka101/ts7-compat-guard/releases/tag/v3.1.0;
+  CI + Guards + self-test green on 27540bd. Announce angle (unused, for the
+  owner): "your lockfile already knows it won't resolve on TS7 — 0.64% of
+  installed packages, 60% of real repos".
 
 ## Build/test commands
 - `npm install` · `npm run build` (rebuild dist/ before tagging; CI enforces drift) · `npm test`
