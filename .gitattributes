@@ -4,3 +4,11 @@
 *.png binary
 *.jpg binary
 *.gif binary
+
+# Collapsed in pull requests and excluded from the language bar. Dependabot
+# opens these weekly and the churn is machine-written, not reviewable by eye.
+package-lock.json linguist-generated=true
+
+# Built bundle, committed and executed directly by the Action. Generated, so it
+# is kept out of the language bar and folded shut in diffs.
+dist/* linguist-generated=true

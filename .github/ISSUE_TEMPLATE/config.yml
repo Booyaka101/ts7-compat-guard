@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: TypeScript 7 / tsgo repository
+    url: https://github.com/microsoft/typescript-go
+    about: The native compiler itself, and what it does and does not support yet.
+  - name: TypeScript 7 migration notes
+    url: https://devblogs.microsoft.com/typescript/
+    about: Upstream announcements about the port and its compatibility boundary.
+  - name: Security issue
+    url: https://github.com/Booyaka101/ts7-compat-guard/security/advisories/new
+    about: Please report vulnerabilities privately, not as a public issue.
