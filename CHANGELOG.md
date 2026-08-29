@@ -4,6 +4,55 @@ All notable changes to `ts7-compat-guard` are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [3.2.0] - 2026-08-29
+
+The guard now resolves the **effective** TypeScript version instead of trusting
+the declared spec alone. Rationale: on 2026-08-29 the npm registry's
+`typescript` dist-tag `latest` is **7.0.2**, so a repo declaring
+`"typescript": "latest"` (or `"*"`, or `">=6.0.0"`) installs TypeScript 7 —
+its typescript-eslint run is already broken — while v3.1 read those specs as
+"not TS7", downgraded the Compiler-API conflicts to warnings and exited 0.
+The declared spec is an intent; `node_modules` is a fact.
+
+### Added
+- **Installed-version resolution for TypeScript itself**: the version at
+  `node_modules/typescript/package.json` (package dir first, then the repo
+  root for hoisted monorepos; pnpm symlinks resolve on read) wins over the
+  declared spec. Any dependency key aliased `npm:typescript@…` (the
+  announcement's `@typescript/native` layout) is resolved to *its* installed
+  directory the same way. The manifest-`name` check keeps layout B honest:
+  the TS6 shim installed under the `typescript` key never reads as the
+  compiler. Prerelease installs (`7.1.0-dev.x`) compare with
+  `includePrerelease`; malformed or empty installed manifests fall back to
+  the declared spec. Precedence: **installed > override/resolutions pin >
+  declared range**.
+- **A third state: undetermined.** When the spec is unresolvable (`latest`,
+  `*`, git/url, `workspace:`, `catalog:`) AND nothing is installed, the
+  report says so instead of guessing:
+  `typescript latest → undetermined: dist-tag spec and no installed
+  typescript; run npm install for a definite answer` — same posture as the
+  peer-scan "not run" note. No conflict is invented from an undetermined
+  state; exit stays 0. Surfaced in text, `--json`
+  (`typescript.undetermined`), SARIF (`ts7-compat/ts/undetermined`, level
+  `note`) and as an Action `::notice::`.
+- JSON: `typescript.effectiveVersion`, `typescript.effectiveSource`
+  (`node_modules` | `override` | `declared`), `typescript.effectiveTs7`,
+  `typescript.undetermined`, and `typescript.ts7Alias.source`. The declared
+  spec stays in `typescript.raw`.
+- Report: installed detections name the exact version —
+  `typescript latest → TypeScript 7.0.2 detected (installed, via
+  devDependencies)`; TypeScript installed but not declared reports
+  `typescript (not declared) → … (installed)`.
+- Measured before shipping on the 15-repo corpus from v3.1 (see the PR):
+  verdict flips hand-verified against each repo's actual
+  `node_modules/typescript/package.json`.
+- 31 new tests (214 total).
+
+### Fixed
+- A repo on `"typescript": "latest"` with TS 7.0.2 installed now reports
+  **TypeScript 7.0.2 detected** and fails `--mode fail` on Compiler-API
+  conflicts, instead of "not TS7" + warnings + exit 0.
+
 ## [3.1.0] - 2026-08-11
 
 A second, **generic** dependency pillar: the installed tree. Until now the

@@ -31,6 +31,13 @@ function peerText(p) {
 const PEER_NOT_RUN =
   '[installed tree]  not run — no node_modules found; run npm install for full coverage';
 
+/** typescript label for the recursive per-package line. */
+function tsLabelOf(r) {
+  const t = (r && r.typescript) || {};
+  if (t.undetermined) return `${t.raw} — undetermined`;
+  return t.raw || 'n/a';
+}
+
 /** One NOTICE line for a TS7-ready dependency. */
 function noticeText(n) {
   const meta = [];
@@ -50,12 +57,13 @@ function humanReport(result, opts = {}) {
 
   lines.push(c.bold(TITLE));
 
-  const tsRaw = result.typescript.raw;
-  const srcNote =
-    result.typescript.source && result.typescript.source !== 'dependencies'
-      ? c.dim(` (via ${result.typescript.source})`)
-      : '';
   const ts = result.typescript || {};
+  const tsRaw = ts.raw;
+  const installed = ts.effectiveSource === 'node_modules';
+  const srcMeta = [];
+  if (installed) srcMeta.push('installed');
+  if (ts.source && ts.source !== 'dependencies') srcMeta.push(`via ${ts.source}`);
+  const srcNote = srcMeta.length ? c.dim(` (${srcMeta.join(', ')})`) : '';
   if (ts.shimAlias) {
     // The announcement's side-by-side layout: `typescript` aliased to the shim.
     lines.push(
@@ -64,16 +72,34 @@ function humanReport(result, opts = {}) {
         c.dim(' — Compiler-API consumers resolve the TypeScript 6 API') +
         srcNote
     );
-  } else if (tsRaw == null) {
+  } else if (ts.undetermined) {
+    // Same posture as the peer-scan "not run" note: an unresolvable spec with
+    // nothing installed is a stated coverage gap, never a guess either way.
+    lines.push(
+      '  ' +
+        c.yellow(
+          `typescript ${tsRaw} → undetermined: ${ts.undetermined.reason}; run npm install for a definite answer`
+        )
+    );
+  } else if (tsRaw == null && ts.effectiveVersion == null) {
     lines.push(c.dim('  typescript: not a direct dependency'));
-  } else if (result.ts7) {
-    lines.push('  ' + c.red(`typescript ${tsRaw} → TypeScript 7.0 detected`) + srcNote);
+  } else if (ts.effectiveTs7) {
+    const label = installed ? `TypeScript ${ts.effectiveVersion} detected` : 'TypeScript 7.0 detected';
+    lines.push('  ' + c.red(`typescript ${tsRaw == null ? '(not declared)' : tsRaw} → ${label}`) + srcNote);
   } else {
-    lines.push('  ' + c.green(`typescript ${tsRaw} → TypeScript 6.x (pre-7.0)`) + srcNote);
+    const label =
+      installed && ts.effectiveVersion
+        ? `TypeScript ${ts.effectiveVersion} (pre-7.0)`
+        : 'TypeScript 6.x (pre-7.0)';
+    lines.push('  ' + c.green(`typescript ${tsRaw == null ? '(not declared)' : tsRaw} → ${label}`) + srcNote);
   }
   if (ts.ts7Alias) {
     lines.push(
-      '  ' + c.red(`TypeScript 7.0 detected via "${ts.ts7Alias.key}": ${ts.ts7Alias.raw}`)
+      '  ' +
+        c.red(
+          `TypeScript 7.0 detected via "${ts.ts7Alias.key}": ${ts.ts7Alias.raw}` +
+            (ts.ts7Alias.source === 'node_modules' ? ` (installed ${ts.ts7Alias.resolved})` : '')
+        )
     );
   }
   if (result.shim && result.shim.present) {
@@ -217,6 +243,13 @@ function humanReport(result, opts = {}) {
     );
   } else if (result.warningCount > 0 && result.ts7) {
     lines.push(c.yellow(summary + ' — nothing is build-breaking yet; review the warnings.'));
+  } else if (result.warningCount > 0 && ts.undetermined) {
+    lines.push(
+      c.yellow(
+        summary +
+          ' — the TypeScript version is undetermined; nothing failed, but these break once TypeScript 7 is installed.'
+      )
+    );
   } else if (result.warningCount > 0) {
     lines.push(
       c.yellow(summary + ' — you are on TypeScript 6.x today, so nothing is broken yet.')
@@ -277,7 +310,7 @@ function humanReportMany(agg, opts = {}) {
     const notices = r.notices || [];
     const shimNote = r.shim && r.shim.present ? c.green('  [TS6 shim]') : '';
     if (r.hasActiveConflict) {
-      lines.push('  ' + c.red(`● ${rel}`) + c.dim(`  (typescript ${r.typescript.raw})`) + shimNote);
+      lines.push('  ' + c.red(`● ${rel}`) + c.dim(`  (typescript ${tsLabelOf(r)})`) + shimNote);
       for (const conf of r.conflicts.filter((x) => depSeverity(x, r) === 'conflict')) {
         lines.push('      ' + c.red(`CONFLICT: ${conf.pkg} — ${conf.reason}`));
         lines.push('        ' + c.yellow(`Fix: ${conf.fix}`));
@@ -291,7 +324,7 @@ function humanReportMany(agg, opts = {}) {
       }
       for (const n of notices) lines.push('      ' + c.green(noticeText(n)));
     } else if (r.warningCount > 0) {
-      lines.push('  ' + c.yellow(`○ ${rel}`) + c.dim(`  (typescript ${r.typescript.raw || 'n/a'})`) + shimNote);
+      lines.push('  ' + c.yellow(`○ ${rel}`) + c.dim(`  (typescript ${tsLabelOf(r)})`) + shimNote);
       for (const conf of r.conflicts) {
         if (conf.downgradedByShim) {
           lines.push('      ' + c.yellow(`WARNING: ${conf.pkg} — ${conf.reason} (downgraded: TS6 API shim present)`));
@@ -316,7 +349,13 @@ function humanReportMany(agg, opts = {}) {
       lines.push('  ' + c.green(`✓ ${rel}`) + c.dim(`  (${notices.length} TS7-ready dep(s))`) + shimNote);
       for (const n of notices) lines.push('      ' + c.green(noticeText(n)));
     } else {
-      lines.push('  ' + c.green(`✓ ${rel}`) + c.dim('  (clean)') + shimNote);
+      const und = r.typescript && r.typescript.undetermined;
+      lines.push(
+        '  ' +
+          c.green(`✓ ${rel}`) +
+          c.dim(und ? `  (typescript ${tsLabelOf(r)})` : '  (clean)') +
+          shimNote
+      );
     }
   }
 

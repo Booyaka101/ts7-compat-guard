@@ -154,6 +154,31 @@ proves an **install-time peer conflict**, not a runtime crash (pnpm, yarn and
 `npm --legacy-peer-deps` install straight through it). Add `--strict-peers` to
 make them `conflict`s and exit `1`.
 
+### Example — the effective TypeScript version (new in v3.2)
+
+A repo declaring `"typescript": "latest"` with `typescript-eslint`. As of
+2026-08-29 the npm dist-tag `latest` points at **7.0.2**, so `npm install`
+puts TypeScript 7 on disk and the lint run is already broken — v3.1 read
+`latest` as "not TS7" and exited 0. v3.2 reads what is installed:
+
+```
+=== TypeScript 7.0 / tsgo Readiness ===
+  typescript latest → TypeScript 7.0.2 detected (installed, via devDependencies)
+
+  [dependencies]
+  CONFLICT: typescript-eslint — typescript-eslint reads types via the TypeScript Compiler API, …
+    Fix: Run typescript-eslint against @typescript/typescript6 side-by-side, or pin typescript to ^6.x
+
+  1 conflict(s) — type-checking/builds will break under TypeScript 7.0.
+```
+
+Exit `1`. Delete `node_modules` and the same repo is honestly **undetermined**
+(exit `0`, no conflict invented):
+
+```
+  typescript latest → undetermined: dist-tag spec and no installed typescript; run npm install for a definite answer
+```
+
 ### Options
 
 | Flag | Default | Meaning |
@@ -355,11 +380,17 @@ for advisories, plus a job-summary line.
 
 ## How detection works
 
-1. Read `package.json`; resolve the **effective** `typescript` version — a top-level
-   `overrides` / `resolutions` / `pnpm.overrides` pin wins over a declared dependency
-   — and flag TS7 when its floor is `>= 7.0.0`. `npm:` alias **targets** are resolved
-   too: any dependency aliased to `npm:typescript@^7` means TS7 *is* installed, and
-   `typescript` aliased to `npm:@typescript/typescript6@…` means the API half is 6.x.
+1. Resolve the **effective** `typescript` version, preferring what is actually
+   installed (v3.2): the version at `node_modules/typescript/package.json` wins
+   over any declared spec (package dir first, then the repo root for hoisted
+   monorepos; pnpm symlinks resolve on read; a manifest whose `name` is not
+   `typescript` — e.g. the TS6 shim aliased under the `typescript` key — never
+   counts). When nothing is installed, a top-level `overrides` / `resolutions` /
+   `pnpm.overrides` pin wins over a declared range. TS7 is flagged when the
+   effective version is `>= 7.0.0`. `npm:` alias **targets** are resolved too:
+   any dependency aliased to `npm:typescript@^7` (or whose installed directory
+   contains typescript `>= 7`) means TS7 *is* installed, and `typescript`
+   aliased to `npm:@typescript/typescript6@…` means the API half is 6.x.
 2. Cross-reference every other dependency against the readiness ledger (`src/db.json`).
    For each match, resolve the **effective version**: the installed
    `node_modules/<pkg>/package.json` version when present (per package dir, falling
@@ -376,10 +407,21 @@ for advisories, plus a job-summary line.
 5. Read `tsconfig.json` (JSONC + relative `extends`); flag removed options and derive
    advisories. Removed options are never downgraded by the shim.
 
-Non-semver `typescript` specs (`latest`, `*`, git/file URLs) are treated conservatively
-as *not* TS7 to avoid false alarms. Prerelease installed versions are compared with
-`includePrerelease`. Empty or malformed installed manifests fall back to the declared
-range.
+Non-semver `typescript` specs (`latest`, `*`, git/file URLs, `workspace:`,
+`catalog:`) are resolved from the installed tree — `"typescript": "latest"`
+with TS 7.0.2 installed **is** TS7 (as of 2026-08-29 the npm dist-tag `latest`
+points at 7.0.2, so an unpinned spec installs TypeScript 7). When such a spec
+cannot be resolved *and* nothing is installed, the scan reports an explicit
+**undetermined** state instead of guessing:
+
+```
+  typescript latest → undetermined: dist-tag spec and no installed typescript; run npm install for a definite answer
+```
+
+No conflict is ever invented from an undetermined state — it exits 0, in the
+same posture as the peer-scan "not run" note. Prerelease installed versions are
+compared with `includePrerelease`. Empty or malformed installed manifests fall
+back to the declared range.
 
 ## Covered dependencies
 
@@ -425,7 +467,7 @@ carry the same `ts7Ready` / `ts7Status` / `source` / `checkedAt` fields.
 ```bash
 npm install
 npm run build    # bundle src/action.js -> dist/action.js (esbuild; inlines semver + db.json)
-npm test         # 183 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
+npm test         # 214 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, effective-TS resolution, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
 ```
 
 The Action runs from the committed self-contained bundle `dist/action.js`, so

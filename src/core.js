@@ -38,6 +38,9 @@ const DEP_FIELDS = [
   'peerDependencies',
 ];
 
+// getTypescriptSpec sources that are a tree-wide pin rather than a plain range.
+const OVERRIDE_SOURCES = new Set(['overrides', 'resolutions', 'pnpm.overrides']);
+
 /**
  * Extract a comparable coercion of a package.json version specifier and decide
  * whether it targets TypeScript >= 7.0.0.
@@ -121,18 +124,82 @@ function detectShim(deps) {
   return { present: false, layout: null, key: null, range: null };
 }
 
+/** Version-level TS7 test, prerelease-inclusive (7.1.0-dev.x is still TS7). */
+function isTs7Version(v) {
+  return semver.satisfies(v, '>=7.0.0', { includePrerelease: true }) || semver.major(v) >= 7;
+}
+
+/**
+ * Read the installed manifest at node_modules/<key> across `dirs` (package dir
+ * first, then repo root for hoisted monorepos; pnpm symlinks resolve on read)
+ * and return its version — only when the manifest's `name` is `typescript`.
+ * The name check is load-bearing: in the announcement's alias layout the
+ * `typescript` key installs the TS6 shim, whose manifest says
+ * `@typescript/typescript6`, and that must never read as the compiler itself.
+ * Malformed or empty manifests are skipped, never thrown on.
+ */
+function readInstalledTypescript(key, dirs) {
+  for (const dir of dirs || []) {
+    if (!dir) continue;
+    const p = path.join(dir, 'node_modules', ...key.split('/'), 'package.json');
+    try {
+      const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (
+        m &&
+        typeof m === 'object' &&
+        m.name === 'typescript' &&
+        typeof m.version === 'string' &&
+        semver.valid(m.version)
+      ) {
+        return { version: m.version };
+      }
+    } catch (_) {
+      /* absent or malformed — keep looking, then fall back to the spec */
+    }
+  }
+  return null;
+}
+
+/**
+ * Short label for a spec neither semver.minVersion nor semver.coerce can
+ * resolve — used by the undetermined report line to say *why*.
+ */
+function classifyUnresolvableSpec(raw) {
+  let s = String(raw == null ? '' : raw).trim();
+  const npmAlias = s.match(/^npm:(@?[^@]+)@(.+)$/);
+  if (npmAlias) s = npmAlias[2].trim();
+  else if (s.startsWith('npm:')) s = '';
+  if (/^workspace:/.test(s)) return 'workspace protocol spec';
+  if (/^catalog:/.test(s)) return 'catalog spec';
+  if (/^(git|git\+|github:|gitlab:|bitbucket:)/.test(s) || /^https?:/.test(s)) return 'git/url spec';
+  if (/^(file|link|portal):/.test(s)) return 'file spec';
+  if (s === '' || s === '*') return 'wildcard spec';
+  return 'dist-tag spec';
+}
+
 /**
  * Detect TypeScript 7 installed under an alias — any dependency key whose spec
- * is `npm:typescript@<range>` with a floor >= 7.0.0 (the announcement's
- * side-by-side layout uses `"@typescript/native": "npm:typescript@^7.0.2"`).
+ * is `npm:typescript@<range>` (the announcement's side-by-side layout uses
+ * `"@typescript/native": "npm:typescript@^7.0.2"`). The version actually
+ * installed at that key wins over the declared floor: an aliased install that
+ * resolved below 7 is not TS7 evidence, and an unresolvable aliased spec
+ * (`npm:typescript@latest`) still reads as TS7 once 7.x is installed there.
  * The `typescript` key itself is handled by getTypescriptSpec.
  */
-function detectTs7Alias(deps) {
+function detectTs7Alias(deps, nmDirs) {
   for (const [key, value] of Object.entries(deps || {})) {
     if (key === 'typescript') continue;
     const info = analyzeTypescriptVersion(value);
-    if (info.aliasTarget === 'typescript' && info.ts7) {
-      return { key, raw: String(value), resolved: info.resolved };
+    if (info.aliasTarget !== 'typescript') continue;
+    const installed = readInstalledTypescript(key, nmDirs);
+    if (installed) {
+      if (isTs7Version(installed.version)) {
+        return { key, raw: String(value), resolved: installed.version, source: 'node_modules' };
+      }
+      continue;
+    }
+    if (info.ts7) {
+      return { key, raw: String(value), resolved: info.resolved, source: 'declared' };
     }
   }
   return null;
@@ -391,6 +458,11 @@ function mergeDeps(pkg) {
   );
 }
 
+// npm itself tolerates a UTF-8 BOM (common in Windows-authored files).
+function stripBom(text) {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
 function readPackageJson(dir) {
   const pkgPath = path.join(dir, 'package.json');
   if (!fs.existsSync(pkgPath)) {
@@ -407,7 +479,7 @@ function readPackageJson(dir) {
     throw err;
   }
   try {
-    return { pkg: JSON.parse(text), pkgPath };
+    return { pkg: JSON.parse(stripBom(text)), pkgPath };
   } catch (e) {
     const err = new Error(`Invalid JSON in ${pkgPath}: ${e.message}`);
     err.code = 'EBADPKG';
@@ -425,7 +497,7 @@ function loadConfig(dir) {
   if (!fs.existsSync(cfgPath)) return {};
   let cfg;
   try {
-    cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg = JSON.parse(stripBom(fs.readFileSync(cfgPath, 'utf8')));
   } catch (e) {
     const err = new Error(`Invalid JSON in ${cfgPath}: ${e.message}`);
     err.code = 'EBADCONFIG';
@@ -457,13 +529,44 @@ function analyze(pkg, opts = {}) {
   const deps = mergeDeps(pkg);
   const tsSpec = getTypescriptSpec(pkg);
   const tsInfo = analyzeTypescriptVersion(tsSpec.raw);
+  const nmDirs = opts.nodeModulesDirs || [];
   const shim = detectShim(deps);
-  const ts7Alias = detectTs7Alias(deps);
+  const ts7Alias = detectTs7Alias(deps, nmDirs);
   // `typescript` aliased to the shim means the API-consuming half of the
   // side-by-side layout — TS6 semantics for Compiler-API consumers.
   const tsIsShimAlias = tsInfo.aliasTarget === SHIM_PACKAGE;
-  const ts7 = tsInfo.ts7 || !!ts7Alias;
-  const nmDirs = opts.nodeModulesDirs || [];
+
+  // Effective TypeScript for the `typescript` key itself: the version actually
+  // installed wins over any declared spec (a spec is an intent, the installed
+  // tree is a fact — "latest" resolves to whatever npm installed, 7.0.2 as of
+  // 2026-08-29); an overrides/resolutions pin wins over a plain declared range
+  // only when nothing is installed (getTypescriptSpec already ordered that).
+  // Unresolvable spec + nothing installed = the third state: undetermined,
+  // stated explicitly and never turned into a conflict.
+  let tsEffective = { version: null, source: null };
+  let tsUndetermined = null;
+  // A `typescript` key aliased to some other package describes THAT package's
+  // versions — never the compiler's. Installed resolution still applies (the
+  // manifest-name check tells the truth about what actually resolved there).
+  const tsKeyIsTypescript = tsInfo.aliasTarget == null || tsInfo.aliasTarget === 'typescript';
+  if (!tsIsShimAlias) {
+    const installed = readInstalledTypescript('typescript', nmDirs);
+    if (installed) {
+      tsEffective = { version: installed.version, source: 'node_modules' };
+    } else if (tsKeyIsTypescript && tsInfo.satisfiable) {
+      tsEffective = {
+        version: tsInfo.resolved,
+        source: OVERRIDE_SOURCES.has(tsSpec.source) ? 'override' : 'declared',
+      };
+    } else if (tsKeyIsTypescript && tsSpec.raw != null) {
+      tsUndetermined = {
+        spec: String(tsSpec.raw),
+        reason: `${classifyUnresolvableSpec(tsSpec.raw)} and no installed typescript`,
+      };
+    }
+  }
+  const tsEffectiveTs7 = tsEffective.version != null && isTs7Version(tsEffective.version);
+  const ts7 = tsEffectiveTs7 || !!ts7Alias;
 
   const conflicts = [];
   const notices = [];
@@ -585,9 +688,20 @@ function analyze(pkg, opts = {}) {
       resolved: tsInfo.resolved,
       satisfiable: tsInfo.satisfiable,
       source: tsSpec.source,
+      effectiveVersion: tsEffective.version,
+      effectiveSource: tsEffective.source,
+      effectiveTs7: tsEffectiveTs7,
+      undetermined: tsUndetermined,
       aliasTarget: tsInfo.aliasTarget || null,
       shimAlias: tsIsShimAlias,
-      ts7Alias: ts7Alias ? { key: ts7Alias.key, raw: ts7Alias.raw, resolved: ts7Alias.resolved } : null,
+      ts7Alias: ts7Alias
+        ? {
+            key: ts7Alias.key,
+            raw: ts7Alias.raw,
+            resolved: ts7Alias.resolved,
+            source: ts7Alias.source,
+          }
+        : null,
     },
     shim: shim.present || tsIsShimAlias
       ? {
@@ -807,6 +921,9 @@ module.exports = {
   analyzeTypescriptVersion,
   detectShim,
   detectTs7Alias,
+  isTs7Version,
+  readInstalledTypescript,
+  classifyUnresolvableSpec,
   scanInstalledPeers,
   isUnboundedRange,
   DEFAULT_TS_TARGET,

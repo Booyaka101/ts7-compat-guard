@@ -1,0 +1,7 @@
+{
+  "name": "fixture-ts-installed-wins",
+  "devDependencies": {
+    "typescript": "^6.2.0",
+    "ts-morph": "^22.0.0"
+  }
+}

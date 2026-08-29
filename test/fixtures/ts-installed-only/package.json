@@ -1,0 +1,6 @@
+{
+  "name": "fixture-ts-installed-only",
+  "devDependencies": {
+    "ts-morph": "^22.0.0"
+  }
+}

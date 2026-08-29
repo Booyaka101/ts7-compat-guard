@@ -195,6 +195,7 @@ function main() {
     setOutput('status', agg.summary.activeConflictPackages > 0 ? 'conflict' : agg.summary.packagesWithConflicts > 0 ? 'warning' : agg.summary.totalAdvisories > 0 ? 'advisory' : (agg.summary.totalNotices || 0) > 0 ? 'notice' : 'clean');
     setOutput('json', JSON.stringify(json));
     staleDbNotice(agg.results.find((r) => r.dbStale && r.dbStale.stale));
+    for (const r of agg.results) undeterminedNotice(r);
     if (peers && !agg.summary.peerScanRan) {
       emit(
         'notice',
@@ -260,12 +261,13 @@ function main() {
     );
   }
   staleDbNotice(result.dbStale && result.dbStale.stale ? result : null);
+  undeterminedNotice(result);
 
   if (sarifFile) writeSarif([result], resolvedDir, version, sarifFile);
 
   appendSummary(
     `### ts7-compat-guard\n\n\`typescript\` ${result.typescript.raw || 'n/a'} → ` +
-      `${result.ts7 ? 'TypeScript 7.0 detected' : 'TypeScript 6.x'} · ` +
+      `${result.ts7 ? 'TypeScript 7.0 detected' : result.typescript.undetermined ? 'undetermined' : 'TypeScript 6.x'} · ` +
       `**${result.activeConflictCount}** conflict(s), **${result.warningCount}** warning(s), ` +
       `**${result.peerFindingCount || 0}** installed-tree peer finding(s), ` +
       `**${result.advisoryCount}** advisory(ies) (status: ${json.status}).`
@@ -277,6 +279,15 @@ function main() {
   } else {
     process.exitCode = 0;
   }
+}
+
+function undeterminedNotice(result) {
+  const und = result && result.typescript && result.typescript.undetermined;
+  if (!und) return;
+  emit(
+    'notice',
+    `ts7-compat-guard: typescript "${und.spec}" → undetermined: ${und.reason}; run npm install for a definite answer.`
+  );
 }
 
 function staleDbNotice(result) {
