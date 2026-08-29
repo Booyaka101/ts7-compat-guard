@@ -1212,6 +1212,616 @@ if (fs.existsSync(DIST)) {
   });
 }
 
+// ==================== v3.2: effective TypeScript resolution ====================
+const TMP = (name) => path.join(__dirname, name);
+function writeTree(root, files) {
+  for (const [rel, content] of Object.entries(files)) {
+    const p = path.join(root, rel);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, content);
+  }
+}
+
+section('v3.2: helpers');
+test('isTs7Version: 7.0.2 / 7.1.0-dev prerelease are TS7, 6.9.0 is not', () => {
+  assert.strictEqual(core.isTs7Version('7.0.2'), true);
+  assert.strictEqual(core.isTs7Version('7.1.0-dev.20260828.1'), true);
+  assert.strictEqual(core.isTs7Version('6.9.0'), false);
+});
+test('classifyUnresolvableSpec names the spec family', () => {
+  assert.strictEqual(core.classifyUnresolvableSpec('latest'), 'dist-tag spec');
+  assert.strictEqual(core.classifyUnresolvableSpec('*'), 'wildcard spec');
+  assert.strictEqual(core.classifyUnresolvableSpec('git+https://github.com/microsoft/TypeScript.git'), 'git/url spec');
+  assert.strictEqual(core.classifyUnresolvableSpec('workspace:*'), 'workspace protocol spec');
+  assert.strictEqual(core.classifyUnresolvableSpec('catalog:'), 'catalog spec');
+  assert.strictEqual(core.classifyUnresolvableSpec('file:../ts'), 'file spec');
+  assert.strictEqual(core.classifyUnresolvableSpec('npm:typescript@latest'), 'dist-tag spec');
+});
+test('package.json with a UTF-8 BOM parses (npm tolerates it, so do we)', () => {
+  const dir = TMP('.tmp-bom');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    '﻿' + JSON.stringify({ devDependencies: { typescript: '^7.0.2' } })
+  );
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.ts7, true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('readInstalledTypescript rejects the shim manifest under the typescript key', () => {
+  // ts7-alias-installed has node_modules/typescript = the SHIM's manifest.
+  assert.strictEqual(core.readInstalledTypescript('typescript', [FIX('ts7-alias-installed')]), null);
+  assert.deepStrictEqual(
+    core.readInstalledTypescript('@typescript/native', [FIX('ts7-alias-installed')]),
+    { version: '7.0.2' }
+  );
+  assert.deepStrictEqual(core.readInstalledTypescript('typescript', [FIX('ts-installed-latest')]), {
+    version: '7.0.2',
+  });
+});
+
+section('v3.2: installed version wins (core)');
+test('worked example: "latest" + installed 7.0.2 -> TS7, conflict, exit 1', () => {
+  const r = core.analyzeDir(FIX('ts-installed-latest'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+  assert.strictEqual(r.typescript.effectiveSource, 'node_modules');
+  assert.strictEqual(r.typescript.raw, 'latest');
+  assert.strictEqual(r.typescript.undetermined, null);
+  assert.strictEqual(r.conflicts[0].pkg, 'typescript-eslint');
+  assert.strictEqual(r.conflicts[0].severity, 'conflict');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+test('installed 7.0.2 wins over a declared ^6.2.0 range', () => {
+  const r = core.analyzeDir(FIX('ts-installed-wins'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveSource, 'node_modules');
+  assert.strictEqual(r.conflicts[0].severity, 'conflict');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+test('typescript installed but not declared -> TS7 via node_modules, no declared spec', () => {
+  const r = core.analyzeDir(FIX('ts-installed-only'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.raw, null);
+  assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+  assert.strictEqual(r.typescript.effectiveSource, 'node_modules');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+test('installed 6.5.1 under "latest" -> NOT TS7 (installed wins both ways)', () => {
+  const dir = TMP('.tmp-inst6');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: 'latest', 'ts-morph': '^22.0.0' } }),
+    'node_modules/typescript/package.json': JSON.stringify({ name: 'typescript', version: '6.5.1' }),
+  });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.ts7, false);
+    assert.strictEqual(r.typescript.effectiveVersion, '6.5.1');
+    assert.strictEqual(r.typescript.effectiveSource, 'node_modules');
+    assert.strictEqual(r.typescript.undetermined, null);
+    assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('prerelease installed 7.1.0-dev.x -> TS7 (includePrerelease)', () => {
+  const dir = TMP('.tmp-instpre');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: 'next', 'ts-morph': '^22.0.0' } }),
+    'node_modules/typescript/package.json': JSON.stringify({ name: 'typescript', version: '7.1.0-dev.20260828.1' }),
+  });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.ts7, true);
+    assert.strictEqual(r.typescript.effectiveVersion, '7.1.0-dev.20260828.1');
+    assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('malformed / empty installed manifest falls back to the declared range', () => {
+  const dir = TMP('.tmp-instbad');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: '^7.0.2', 'ts-morph': '^22.0.0' } }),
+    'node_modules/typescript/package.json': '{ not json',
+  });
+  try {
+    let r = core.analyzeDir(dir);
+    assert.strictEqual(r.ts7, true);
+    assert.strictEqual(r.typescript.effectiveSource, 'declared');
+    fs.writeFileSync(path.join(dir, 'node_modules', 'typescript', 'package.json'), '{}');
+    r = core.analyzeDir(dir);
+    assert.strictEqual(r.ts7, true);
+    assert.strictEqual(r.typescript.effectiveSource, 'declared');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('hoisted monorepo: package dir empty, repo root carries node_modules/typescript', () => {
+  const root = TMP('.tmp-hoist');
+  writeTree(root, {
+    'package.json': JSON.stringify({ name: 'root', workspaces: ['packages/*'] }),
+    'node_modules/typescript/package.json': JSON.stringify({ name: 'typescript', version: '7.0.2' }),
+    'packages/a/package.json': JSON.stringify({ devDependencies: { typescript: 'latest', 'ts-morph': '^22.0.0' } }),
+  });
+  try {
+    const r = core.analyzeDir(path.join(root, 'packages', 'a'), { root });
+    assert.strictEqual(r.ts7, true);
+    assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+    assert.strictEqual(r.typescript.effectiveSource, 'node_modules');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+test('pnpm-style symlinked node_modules/typescript resolves through the link', () => {
+  const dir = TMP('.tmp-instlink');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: 'latest' } }),
+    'node_modules/.pnpm/typescript@7.0.2/node_modules/typescript/package.json': JSON.stringify({
+      name: 'typescript',
+      version: '7.0.2',
+    }),
+  });
+  const link = path.join(dir, 'node_modules', 'typescript');
+  const target = path.join(dir, 'node_modules', '.pnpm', 'typescript@7.0.2', 'node_modules', 'typescript');
+  try {
+    fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.ts7, true);
+    assert.strictEqual(r.typescript.effectiveSource, 'node_modules');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('override still wins over a declared range when nothing is installed', () => {
+  const r = core.analyzeDir(FIX('overrides-pin'));
+  assert.strictEqual(r.ts7, false);
+  assert.strictEqual(r.typescript.effectiveSource, 'override');
+  const r2 = core.analyze({
+    devDependencies: { typescript: '^7.0.2' },
+    overrides: { typescript: '^6.5.0' },
+  });
+  assert.strictEqual(r2.ts7, false);
+  assert.strictEqual(r2.typescript.effectiveVersion, '6.5.0');
+  assert.strictEqual(r2.typescript.effectiveSource, 'override');
+});
+test('plain declared range resolves with effectiveSource declared', () => {
+  const r = core.analyze({ devDependencies: { typescript: '^7.0.2' } });
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+  assert.strictEqual(r.typescript.effectiveSource, 'declared');
+});
+
+section('v3.2: the undetermined third state (core)');
+test('"latest" + no node_modules -> undetermined, warnings only, exit 0', () => {
+  const r = core.analyzeDir(FIX('ts-undet-latest'));
+  assert.strictEqual(r.ts7, false);
+  assert.strictEqual(r.typescript.effectiveVersion, null);
+  assert.strictEqual(r.typescript.effectiveSource, null);
+  assert.deepStrictEqual(r.typescript.undetermined, {
+    spec: 'latest',
+    reason: 'dist-tag spec and no installed typescript',
+  });
+  assert.strictEqual(r.conflicts[0].severity, 'warning');
+  assert.strictEqual(r.hasActiveConflict, false);
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+});
+test('star / git / workspace / catalog specs -> undetermined with the right reason', () => {
+  const reasons = {
+    '*': 'wildcard spec and no installed typescript',
+    'git+https://github.com/microsoft/TypeScript.git': 'git/url spec and no installed typescript',
+    'workspace:*': 'workspace protocol spec and no installed typescript',
+    'catalog:': 'catalog spec and no installed typescript',
+  };
+  for (const [spec, reason] of Object.entries(reasons)) {
+    const r = core.analyze({ devDependencies: { typescript: spec } });
+    assert.strictEqual(r.ts7, false, spec);
+    assert.ok(r.typescript.undetermined, spec);
+    assert.strictEqual(r.typescript.undetermined.reason, reason, spec);
+    assert.strictEqual(core.exitCodeFor(r, 'fail'), 0, spec);
+  }
+});
+test('resolvable specs are never undetermined; absent typescript is not either', () => {
+  assert.strictEqual(core.analyze({ devDependencies: { typescript: '^6.2.0' } }).typescript.undetermined, null);
+  assert.strictEqual(core.analyze({}).typescript.undetermined, null);
+});
+
+section('v3.2: shim layouts under installed resolution');
+test('layout A installed: TS7 via node_modules + shim downgrade holds, exit 0', () => {
+  const r = core.analyzeDir(FIX('ts7-shim-installed'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+  assert.strictEqual(r.typescript.effectiveSource, 'node_modules');
+  assert.strictEqual(r.shim.present, true);
+  assert.strictEqual(r.conflicts[0].pkg, 'ts-morph');
+  assert.strictEqual(r.conflicts[0].severity, 'warning');
+  assert.strictEqual(r.conflicts[0].downgradedByShim, true);
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+});
+test('layout B installed: shim under the typescript key never reads as the compiler', () => {
+  const r = core.analyzeDir(FIX('ts7-alias-installed'));
+  assert.strictEqual(r.typescript.shimAlias, true);
+  assert.strictEqual(r.typescript.effectiveVersion, null);
+  assert.strictEqual(r.typescript.undetermined, null);
+  assert.strictEqual(r.ts7, true, 'TS7 via the installed @typescript/native alias');
+  assert.strictEqual(r.typescript.ts7Alias.key, '@typescript/native');
+  assert.strictEqual(r.typescript.ts7Alias.resolved, '7.0.2');
+  assert.strictEqual(r.typescript.ts7Alias.source, 'node_modules');
+  assert.strictEqual(r.shim.present, true);
+  assert.strictEqual(r.conflicts[0].severity, 'warning');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+});
+test('layout B without node_modules keeps the declared reading (no regression)', () => {
+  const r = core.analyzeDir(FIX('ts7-alias'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.ts7Alias.source, 'declared');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+});
+test('aliased npm:typescript@latest becomes TS7 once 7.x is installed at that key', () => {
+  const r = core.analyze(
+    { devDependencies: { '@typescript/native': 'npm:typescript@latest' } },
+    { nodeModulesDirs: [FIX('ts7-alias-installed')] }
+  );
+  assert.ok(r.typescript.ts7Alias);
+  assert.strictEqual(r.typescript.ts7Alias.resolved, '7.0.2');
+  assert.strictEqual(r.typescript.ts7Alias.source, 'node_modules');
+  assert.strictEqual(r.ts7, true);
+});
+
+section('v3.2: report text');
+test('worked example line: TypeScript 7.0.2 detected (installed, via devDependencies)', () => {
+  const { code, out } = runCli(['--dir', FIX('ts-installed-latest')]);
+  assert.ok(
+    out.includes('typescript latest → TypeScript 7.0.2 detected (installed, via devDependencies)'),
+    out
+  );
+  assert.ok(/CONFLICT: typescript-eslint — .*reads types via the TypeScript Compiler API/.test(out), out);
+  assert.strictEqual(code, 1);
+});
+test('undetermined line matches the stated posture, exit 0', () => {
+  const { code, out } = runCli(['--dir', FIX('ts-undet-latest')]);
+  assert.ok(
+    out.includes(
+      'typescript latest → undetermined: dist-tag spec and no installed typescript; run npm install for a definite answer'
+    ),
+    out
+  );
+  assert.ok(!/CONFLICT:/.test(out), out);
+  assert.ok(/not run — no node_modules found/.test(out), out);
+  assert.ok(/1 warning\(s\) — the TypeScript version is undetermined/.test(out), out);
+  assert.strictEqual(code, 0);
+});
+test('installed-but-undeclared line says (not declared) … (installed)', () => {
+  const { code, out } = runCli(['--dir', FIX('ts-installed-only')]);
+  assert.ok(out.includes('typescript (not declared) → TypeScript 7.0.2 detected (installed)'), out);
+  assert.strictEqual(code, 1);
+});
+test('installed pre-7 line names the exact version', () => {
+  const dir = TMP('.tmp-inst6b');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: 'latest' } }),
+    'node_modules/typescript/package.json': JSON.stringify({ name: 'typescript', version: '6.5.1' }),
+  });
+  try {
+    const { out } = runCli(['--dir', dir]);
+    assert.ok(out.includes('typescript latest → TypeScript 6.5.1 (pre-7.0) (installed, via devDependencies)'), out);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('alias line appends the installed version in layout B', () => {
+  const { code, out } = runCli(['--dir', FIX('ts7-alias-installed')]);
+  assert.ok(
+    /TypeScript 7\.0 detected via "@typescript\/native": npm:typescript@\^7\.0\.2 \(installed 7\.0\.2\)/.test(out),
+    out
+  );
+  assert.strictEqual(code, 0);
+});
+test('recursive per-package label carries — undetermined', () => {
+  const agg = core.analyzeMany([FIX('ts-undet-latest')]);
+  const text = report.humanReportMany(agg, { color: false, root: FIX('ts-undet-latest') }).join('\n');
+  assert.ok(/typescript latest — undetermined/.test(text), text);
+});
+
+section('v3.2: JSON + SARIF');
+test('--json carries effectiveVersion/effectiveSource/undetermined', () => {
+  const undet = JSON.parse(runCli(['--dir', FIX('ts-undet-latest'), '--json']).out);
+  assert.strictEqual(undet.ts7, false);
+  assert.strictEqual(undet.typescript.effectiveVersion, null);
+  assert.strictEqual(undet.typescript.undetermined.reason, 'dist-tag spec and no installed typescript');
+  assert.strictEqual(undet.status, 'warning');
+  const inst = JSON.parse(runCli(['--dir', FIX('ts-installed-latest'), '--json']).out);
+  assert.strictEqual(inst.ts7, true);
+  assert.strictEqual(inst.typescript.effectiveVersion, '7.0.2');
+  assert.strictEqual(inst.typescript.effectiveSource, 'node_modules');
+  assert.strictEqual(inst.typescript.undetermined, null);
+  assert.strictEqual(inst.status, 'conflict');
+});
+test('SARIF carries the undetermined note (and only when undetermined)', () => {
+  const s = sarif.buildSarif([core.analyzeDir(FIX('ts-undet-latest'))], { root: FIX('ts-undet-latest') });
+  const und = s.runs[0].results.find((x) => x.ruleId === 'ts7-compat/ts/undetermined');
+  assert.ok(und, JSON.stringify(s.runs[0].results));
+  assert.strictEqual(und.level, 'note');
+  assert.ok(
+    /typescript "latest" → undetermined: dist-tag spec and no installed typescript; run npm install for a definite answer/.test(
+      und.message.text
+    ),
+    und.message.text
+  );
+  const s2 = sarif.buildSarif([core.analyzeDir(FIX('ts-installed-latest'))], { root: FIX('ts-installed-latest') });
+  assert.ok(!s2.runs[0].results.some((x) => x.ruleId === 'ts7-compat/ts/undetermined'));
+  assert.ok(s2.runs[0].results.some((x) => x.ruleId === 'ts7-compat/dep/typescript-eslint' && x.level === 'error'));
+});
+
+section('v3.2: Action');
+test('action undetermined -> exit 0 + ::notice:: undetermined', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts-undet-latest'), INPUT_MODE: 'fail' });
+  assert.strictEqual(r.status, 0, r.stdout);
+  assert.ok(
+    /::notice::ts7-compat-guard: typescript "latest" → undetermined: dist-tag spec and no installed typescript/.test(
+      r.stdout
+    ),
+    r.stdout
+  );
+});
+test('action installed 7.0.2 under "latest" -> exit 1 + ::error::', () => {
+  const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts-installed-latest'), INPUT_MODE: 'fail' });
+  assert.strictEqual(r.status, 1, r.stdout);
+  assert.ok(/::error::CONFLICT: typescript-eslint/.test(r.stdout), r.stdout);
+});
+
+if (fs.existsSync(DIST)) {
+  section('v3.2: bundled dist');
+  test('dist bundle: installed wins (exit 1) and undetermined stays exit 0', () => {
+    const r = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts-installed-latest'), INPUT_MODE: 'fail' }, DIST);
+    assert.strictEqual(r.status, 1, r.stdout);
+    const u = spawnAction({ 'INPUT_PACKAGE-DIR': FIX('ts-undet-latest'), INPUT_MODE: 'fail' }, DIST);
+    assert.strictEqual(u.status, 0, u.stdout);
+    assert.ok(/undetermined/.test(u.stdout), u.stdout);
+  });
+}
+
+// ==================== v3.2: lockfile resolution ====================
+section('v3.2: lockfile resolution');
+test('npm lockfile v3 resolves typescript for a bare clone -> TS7, exit 1', () => {
+  const r = core.analyzeDir(FIX('ts-lock-npm'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+  assert.strictEqual(r.typescript.effectiveSource, 'lockfile');
+  assert.strictEqual(r.typescript.lockfile, 'package-lock.json');
+  assert.strictEqual(r.typescript.undetermined, null);
+  assert.strictEqual(r.conflicts[0].severity, 'conflict');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+test('pnpm lockfile importer entry resolves typescript', () => {
+  const r = core.analyzeDir(FIX('ts-lock-pnpm'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveSource, 'lockfile');
+  assert.strictEqual(r.typescript.lockfile, 'pnpm-lock.yaml');
+});
+test('yarn classic lockfile resolves typescript from a multi-spec header', () => {
+  const r = core.analyzeDir(FIX('ts-lock-yarn'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+  assert.strictEqual(r.typescript.lockfile, 'yarn.lock');
+});
+test('installed tree still beats the lockfile', () => {
+  const dir = TMP('.tmp-lockvsinst');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: 'latest' } }),
+    'package-lock.json': JSON.stringify({
+      lockfileVersion: 3,
+      packages: { 'node_modules/typescript': { version: '7.0.2' } },
+    }),
+    'node_modules/typescript/package.json': JSON.stringify({ name: 'typescript', version: '6.5.1' }),
+  });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.typescript.effectiveVersion, '6.5.1');
+    assert.strictEqual(r.typescript.effectiveSource, 'node_modules');
+    assert.strictEqual(r.ts7, false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('lockfile beats an overrides pin (a pin is intent, a lock already resolved)', () => {
+  const dir = TMP('.tmp-lockvspin');
+  writeTree(dir, {
+    'package.json': JSON.stringify({
+      devDependencies: { typescript: 'latest' },
+      overrides: { typescript: '^6.5.0' },
+    }),
+    'package-lock.json': JSON.stringify({
+      lockfileVersion: 3,
+      packages: { 'node_modules/typescript': { version: '7.0.2' } },
+    }),
+  });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.typescript.effectiveSource, 'lockfile');
+    assert.strictEqual(r.ts7, true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('lockfile v1 alias form; aliased key resolves, foreign alias rejected', () => {
+  const dir = TMP('.tmp-lockv1');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { '@typescript/native': 'npm:typescript@latest' } }),
+    'package-lock.json': JSON.stringify({
+      lockfileVersion: 1,
+      dependencies: { '@typescript/native': { version: 'npm:typescript@7.0.2' } },
+    }),
+  });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.ts7, true);
+    assert.strictEqual(r.typescript.ts7Alias.resolved, '7.0.2');
+    assert.strictEqual(r.typescript.ts7Alias.source, 'lockfile');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert.strictEqual(
+    core.readLockfileTypescript('typescript', [FIX('ts7-alias-installed')]),
+    null,
+    'no lockfile there'
+  );
+});
+test('the shim locked under the typescript key never reads as the compiler', () => {
+  const dir = TMP('.tmp-lockshim');
+  writeTree(dir, {
+    'package.json': JSON.stringify({
+      devDependencies: { typescript: 'npm:@typescript/typescript6@^6.0.2', 'ts-morph': '^22.0.0' },
+    }),
+    'package-lock.json': JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        'node_modules/typescript': {
+          name: '@typescript/typescript6',
+          version: '6.0.2',
+          resolved: 'https://registry.npmjs.org/@typescript/typescript6/-/typescript6-6.0.2.tgz',
+        },
+      },
+    }),
+  });
+  try {
+    assert.strictEqual(core.readLockfileTypescript('typescript', [dir]), null);
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.typescript.shimAlias, true);
+    assert.strictEqual(r.typescript.effectiveVersion, null);
+    assert.strictEqual(r.shim.present, true);
+    assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('malformed / ambiguous lockfiles stay undetermined, never throw', () => {
+  const dir = TMP('.tmp-lockbad');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: 'latest' } }),
+    'package-lock.json': '{ not json',
+  });
+  try {
+    assert.strictEqual(core.analyzeDir(dir).typescript.undetermined.spec, 'latest');
+    fs.writeFileSync(
+      path.join(dir, 'yarn.lock'),
+      'typescript@^6:\n  version "6.5.1"\n\ntypescript@^7:\n  version "7.0.2"\n'
+    );
+    fs.rmSync(path.join(dir, 'package-lock.json'));
+    assert.ok(core.analyzeDir(dir).typescript.undetermined, 'two versions is ambiguous');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+section('v3.2: --strict-undetermined');
+test('promotes undetermined ledger warnings to conflicts, exit 1', () => {
+  const r = core.analyzeDir(FIX('ts-undet-latest'), { strictUndetermined: true });
+  assert.strictEqual(r.ts7, false);
+  assert.strictEqual(r.typescript.assumedTs7, true);
+  assert.strictEqual(r.conflicts[0].severity, 'conflict');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+test('off by default, and never fires when the version IS determined', () => {
+  assert.strictEqual(core.analyzeDir(FIX('ts-undet-latest')).typescript.assumedTs7, false);
+  const r = core.analyzeDir(FIX('ts-installed-wins'), { strictUndetermined: true });
+  assert.strictEqual(r.typescript.assumedTs7, false);
+});
+test('CLI --strict-undetermined -> CONFLICT + exit 1, warn mode still 0', () => {
+  const { code, out } = runCli(['--dir', FIX('ts-undet-latest'), '--strict-undetermined']);
+  assert.ok(/CONFLICT: typescript-eslint/.test(out), out);
+  assert.ok(/--strict-undetermined: treated as TypeScript 7\.0/.test(out), out);
+  assert.strictEqual(code, 1);
+  assert.strictEqual(
+    runCli(['--dir', FIX('ts-undet-latest'), '--strict-undetermined', '--mode', 'warn']).code,
+    0
+  );
+});
+test('action strict-undetermined input -> ::error:: + exit 1', () => {
+  const r = spawnAction({
+    'INPUT_PACKAGE-DIR': FIX('ts-undet-latest'),
+    INPUT_MODE: 'fail',
+    'INPUT_STRICT-UNDETERMINED': 'true',
+  });
+  assert.strictEqual(r.status, 1, r.stdout);
+  assert.ok(/::error::CONFLICT: typescript-eslint/.test(r.stdout), r.stdout);
+});
+
+section('v3.2: undetermined status + monorepo inheritance');
+test('an undetermined scan with zero findings is not reported clean', () => {
+  const dir = TMP('.tmp-undetclean');
+  writeTree(dir, { 'package.json': JSON.stringify({ devDependencies: { typescript: 'latest' } }) });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(report.statusOf(r), 'undetermined');
+    assert.strictEqual(report.jsonReport(r).status, 'undetermined');
+    const text = report.humanReport(r, { color: false }).join('\n');
+    assert.ok(/found in what could be checked/.test(text), text);
+    assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('determined + no findings is still plain clean', () => {
+  assert.strictEqual(report.jsonReport(core.analyzeDir(FIX('ts7-clean'))).status, 'clean');
+});
+test('workspace package inherits the root declared spec when nothing is installed', () => {
+  const root = TMP('.tmp-inherit');
+  writeTree(root, {
+    'package.json': JSON.stringify({ name: 'root', devDependencies: { typescript: '^7.0.2' } }),
+    'packages/a/package.json': JSON.stringify({ name: 'a', devDependencies: { 'ts-morph': '^22.0.0' } }),
+  });
+  try {
+    const r = core.analyzeDir(path.join(root, 'packages', 'a'), { root });
+    assert.strictEqual(r.ts7, true);
+    assert.strictEqual(r.typescript.inherited, true);
+    assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+    assert.strictEqual(r.conflicts[0].severity, 'conflict');
+    const text = report.humanReport(r, { color: false }).join('\n');
+    assert.ok(/inherited from the repo root/.test(text), text);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+test('a package declaring its own typescript never inherits', () => {
+  const root = TMP('.tmp-noinherit');
+  writeTree(root, {
+    'package.json': JSON.stringify({ name: 'root', devDependencies: { typescript: '^7.0.2' } }),
+    'packages/a/package.json': JSON.stringify({ devDependencies: { typescript: '^6.2.0' } }),
+  });
+  try {
+    const r = core.analyzeDir(path.join(root, 'packages', 'a'), { root });
+    assert.strictEqual(r.ts7, false);
+    assert.strictEqual(r.typescript.inherited, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+test('recursive summary counts undetermined packages + JSON/Action surfaces', () => {
+  const agg = core.analyzeMany([FIX('ts-undet-latest'), FIX('ts-installed-latest')]);
+  assert.strictEqual(agg.summary.undeterminedPackages, 1);
+  const text = report.humanReportMany(agg, { color: false, root: FIX('ts-undet-latest') }).join('\n');
+  assert.ok(/1 undetermined/.test(text), text);
+});
+test('action emits ts-version / ts-source / undetermined-count outputs', () => {
+  const outFile = path.join(__dirname, '.tmp-ghout4');
+  fs.writeFileSync(outFile, '');
+  const r = spawnAction({
+    'INPUT_PACKAGE-DIR': FIX('ts-installed-latest'),
+    INPUT_MODE: 'warn',
+    GITHUB_OUTPUT: outFile,
+  });
+  assert.strictEqual(r.status, 0, r.stdout);
+  const outs = fs.readFileSync(outFile, 'utf8');
+  assert.ok(/ts-version<<[\s\S]*?7\.0\.2/.test(outs), outs);
+  assert.ok(/ts-source<<[\s\S]*?node_modules/.test(outs), outs);
+  assert.ok(/undetermined-count<<[\s\S]*?0/.test(outs), outs);
+  fs.unlinkSync(outFile);
+});
+
 // -------------------- summary --------------------
 Promise.all(pending).then(() => {
   process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

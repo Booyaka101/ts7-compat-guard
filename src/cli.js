@@ -56,6 +56,12 @@ Options:
                       conflict (they then fail --mode fail). Off by default: a
                       bounded peer range excluding 7.x proves an install-time
                       peer conflict, not a runtime crash.
+  --strict-undetermined
+                      When the effective TypeScript version cannot be
+                      determined (unresolvable spec, nothing installed, no
+                      lockfile entry), treat it as TypeScript 7 so
+                      Compiler-API conflicts fail instead of passing. Off by
+                      default: an unproven version is stated, not assumed.
   --no-peers          Skip the installed-tree peer scan
   --no-tsconfig       Skip tsconfig.json analysis (dependencies only)
   --no-config         Do not read .ts7guardrc.json
@@ -90,6 +96,7 @@ function parseArgs(argv) {
     tsconfig: true,
     peers: true,
     strictPeers: false,
+    strictUndetermined: false,
     targetTs: null,
     help: false,
     version: false,
@@ -130,6 +137,7 @@ function parseArgs(argv) {
     else if (a === '--target-ts') opts.targetTs = takeValue(++i, '--target-ts');
     else if (a.startsWith('--target-ts=')) opts.targetTs = a.slice('--target-ts='.length);
     else if (a === '--strict-peers') opts.strictPeers = true;
+    else if (a === '--strict-undetermined') opts.strictUndetermined = true;
     else if (a === '--no-peers') opts.peers = false;
     else if (a === '--no-config') opts.config = false;
     else if (a === '--no-tsconfig') opts.tsconfig = false;
@@ -222,6 +230,7 @@ function run(argv, io = {}) {
     tsconfig: opts.tsconfig,
     peers: opts.peers,
     strictPeers: opts.strictPeers,
+    strictUndetermined: opts.strictUndetermined,
     targetTs: opts.targetTs || undefined,
   };
   const color = !!isTTY && !process.env.NO_COLOR;

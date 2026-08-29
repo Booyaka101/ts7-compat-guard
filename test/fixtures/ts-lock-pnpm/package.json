@@ -1,0 +1,7 @@
+{
+  "name": "fixture-ts-lock-pnpm",
+  "devDependencies": {
+    "typescript": "latest",
+    "ts-morph": "^22.0.0"
+  }
+}

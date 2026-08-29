@@ -6,3 +6,4 @@ npm-debug.log*
 *.sarif
 test/.tmp-*
 scratch-measure/
+.git-commit-msg.txt

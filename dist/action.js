@@ -2702,6 +2702,7 @@ var require_core = __commonJS({
       "optionalDependencies",
       "peerDependencies"
     ];
+    var OVERRIDE_SOURCES = /* @__PURE__ */ new Set(["overrides", "resolutions", "pnpm.overrides"]);
     function analyzeTypescriptVersion(raw) {
       if (raw == null) return { ts7: false, resolved: null, raw: null, satisfiable: false };
       let spec = String(raw).trim();
@@ -2749,12 +2750,131 @@ var require_core = __commonJS({
       }
       return { present: false, layout: null, key: null, range: null };
     }
-    function detectTs7Alias(deps) {
+    function isTs7Version(v) {
+      return semver.satisfies(v, ">=7.0.0", { includePrerelease: true }) || semver.major(v) >= 7;
+    }
+    function readInstalledTypescript(key, dirs) {
+      for (const dir of dirs || []) {
+        if (!dir) continue;
+        const p = path2.join(dir, "node_modules", ...key.split("/"), "package.json");
+        try {
+          const m = JSON.parse(fs2.readFileSync(p, "utf8"));
+          if (m && typeof m === "object" && m.name === "typescript" && typeof m.version === "string" && semver.valid(m.version)) {
+            return { version: m.version };
+          }
+        } catch (_) {
+        }
+      }
+      return null;
+    }
+    var LOCKFILES = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"];
+    function nameFromResolved(url) {
+      const m = typeof url === "string" ? url.match(/\/(@[^/]+\/[^/]+|[^/@]+)\/-\//) : null;
+      return m ? m[1] : null;
+    }
+    function npmLockTypescript(doc, key) {
+      if (doc.packages && typeof doc.packages === "object") {
+        const e = doc.packages["node_modules/" + key];
+        if (!e || typeof e !== "object" || typeof e.version !== "string") return null;
+        const name = e.name || nameFromResolved(e.resolved) || (key === "typescript" ? "typescript" : null);
+        return name === "typescript" ? e.version : null;
+      }
+      if (doc.dependencies && typeof doc.dependencies === "object") {
+        const e = doc.dependencies[key];
+        if (!e || typeof e !== "object" || typeof e.version !== "string") return null;
+        const alias = e.version.match(/^npm:(@?[^@]+)@(.+)$/);
+        if (alias) return alias[1] === "typescript" ? alias[2] : null;
+        return key === "typescript" ? e.version : null;
+      }
+      return null;
+    }
+    function pnpmLockTypescript(text, key) {
+      if (key !== "typescript") return null;
+      const imp = text.match(/^[ \t]+typescript:[ \t]*\r?\n[ \t]+specifier:.*\r?\n[ \t]+version:[ \t]*([^\s(]+)/m);
+      if (imp) return imp[1].replace(/^['"]|['"]$/g, "");
+      const seen = /* @__PURE__ */ new Set();
+      const re = /^[ \t]{2,}\/?typescript@([0-9][^:\s(]*)/gm;
+      let m;
+      while (m = re.exec(text)) seen.add(m[1]);
+      return seen.size === 1 ? Array.from(seen)[0] : null;
+    }
+    function yarnLockTypescript(text, key) {
+      if (key !== "typescript") return null;
+      const lines = text.split(/\r?\n/);
+      const seen = /* @__PURE__ */ new Set();
+      for (let i = 0; i < lines.length; i++) {
+        const head = lines[i];
+        if (!head.trim() || /^[ \t#]/.test(head) || !head.trim().endsWith(":")) continue;
+        const specs = head.trim().replace(/:$/, "").split(",").map((s) => s.trim().replace(/^["']|["']$/g, ""));
+        const isTs = specs.some((s) => /^typescript@/.test(s) && !/^typescript@npm:(?!typescript[@:])/.test(s));
+        if (!isTs) continue;
+        for (let j = i + 1; j < lines.length && /^[ \t]/.test(lines[j]); j++) {
+          const v = lines[j].match(/^[ \t]+version:?[ \t]+["']?([^"'\s]+)["']?[ \t]*$/);
+          if (v) {
+            seen.add(v[1]);
+            break;
+          }
+        }
+      }
+      return seen.size === 1 ? Array.from(seen)[0] : null;
+    }
+    function readLockfileTypescript(key, dirs) {
+      for (const dir of dirs || []) {
+        if (!dir) continue;
+        for (const file of LOCKFILES) {
+          let text;
+          try {
+            text = stripBom(fs2.readFileSync(path2.join(dir, file), "utf8"));
+          } catch (_) {
+            continue;
+          }
+          let v = null;
+          try {
+            if (file === "yarn.lock") v = yarnLockTypescript(text, key);
+            else if (file === "pnpm-lock.yaml") v = pnpmLockTypescript(text, key);
+            else v = npmLockTypescript(JSON.parse(text), key);
+          } catch (_) {
+            v = null;
+          }
+          if (typeof v === "string" && semver.valid(v)) return { version: v, lockfile: file };
+        }
+      }
+      return null;
+    }
+    function classifyUnresolvableSpec(raw) {
+      let s = String(raw == null ? "" : raw).trim();
+      const npmAlias = s.match(/^npm:(@?[^@]+)@(.+)$/);
+      if (npmAlias) s = npmAlias[2].trim();
+      else if (s.startsWith("npm:")) s = "";
+      if (/^workspace:/.test(s)) return "workspace protocol spec";
+      if (/^catalog:/.test(s)) return "catalog spec";
+      if (/^(git|git\+|github:|gitlab:|bitbucket:)/.test(s) || /^https?:/.test(s)) return "git/url spec";
+      if (/^(file|link|portal):/.test(s)) return "file spec";
+      if (s === "" || s === "*") return "wildcard spec";
+      return "dist-tag spec";
+    }
+    function detectTs7Alias(deps, nmDirs) {
       for (const [key, value] of Object.entries(deps || {})) {
         if (key === "typescript") continue;
         const info = analyzeTypescriptVersion(value);
-        if (info.aliasTarget === "typescript" && info.ts7) {
-          return { key, raw: String(value), resolved: info.resolved };
+        if (info.aliasTarget !== "typescript") continue;
+        const resolvedAt = readInstalledTypescript(key, nmDirs) || (() => {
+          const l = readLockfileTypescript(key, nmDirs);
+          return l ? { version: l.version, source: "lockfile" } : null;
+        })();
+        if (resolvedAt) {
+          if (isTs7Version(resolvedAt.version)) {
+            return {
+              key,
+              raw: String(value),
+              resolved: resolvedAt.version,
+              source: resolvedAt.source || "node_modules"
+            };
+          }
+          continue;
+        }
+        if (info.ts7) {
+          return { key, raw: String(value), resolved: info.resolved, source: "declared" };
         }
       }
       return null;
@@ -2939,6 +3059,9 @@ var require_core = __commonJS({
         pkg.dependencies || {}
       );
     }
+    function stripBom(text) {
+      return text.charCodeAt(0) === 65279 ? text.slice(1) : text;
+    }
     function readPackageJson(dir) {
       const pkgPath = path2.join(dir, "package.json");
       if (!fs2.existsSync(pkgPath)) {
@@ -2955,7 +3078,7 @@ var require_core = __commonJS({
         throw err;
       }
       try {
-        return { pkg: JSON.parse(text), pkgPath };
+        return { pkg: JSON.parse(stripBom(text)), pkgPath };
       } catch (e) {
         const err = new Error(`Invalid JSON in ${pkgPath}: ${e.message}`);
         err.code = "EBADPKG";
@@ -2967,7 +3090,7 @@ var require_core = __commonJS({
       if (!fs2.existsSync(cfgPath)) return {};
       let cfg;
       try {
-        cfg = JSON.parse(fs2.readFileSync(cfgPath, "utf8"));
+        cfg = JSON.parse(stripBom(fs2.readFileSync(cfgPath, "utf8")));
       } catch (e) {
         const err = new Error(`Invalid JSON in ${cfgPath}: ${e.message}`);
         err.code = "EBADCONFIG";
@@ -2985,13 +3108,41 @@ var require_core = __commonJS({
       const database = opts.extraDb ? Object.assign({}, base.packages, opts.extraDb) : base.packages;
       const ignore = new Set(opts.ignore || []);
       const deps = mergeDeps(pkg);
-      const tsSpec = getTypescriptSpec(pkg);
+      let tsSpec = getTypescriptSpec(pkg);
+      const inheritedSpec = tsSpec.raw == null && opts.rootSpec && opts.rootSpec.raw != null ? opts.rootSpec : null;
+      if (inheritedSpec) tsSpec = { raw: inheritedSpec.raw, source: inheritedSpec.source };
       const tsInfo = analyzeTypescriptVersion(tsSpec.raw);
-      const shim = detectShim(deps);
-      const ts7Alias = detectTs7Alias(deps);
-      const tsIsShimAlias = tsInfo.aliasTarget === SHIM_PACKAGE;
-      const ts7 = tsInfo.ts7 || !!ts7Alias;
       const nmDirs = opts.nodeModulesDirs || [];
+      const shim = detectShim(deps);
+      const ts7Alias = detectTs7Alias(deps, nmDirs);
+      const tsIsShimAlias = tsInfo.aliasTarget === SHIM_PACKAGE;
+      let tsEffective = { version: null, source: null };
+      let tsUndetermined = null;
+      const tsKeyIsTypescript = tsInfo.aliasTarget == null || tsInfo.aliasTarget === "typescript";
+      let tsLockfile = null;
+      if (!tsIsShimAlias) {
+        const installed = readInstalledTypescript("typescript", nmDirs);
+        const locked = installed ? null : readLockfileTypescript("typescript", nmDirs);
+        if (installed) {
+          tsEffective = { version: installed.version, source: "node_modules" };
+        } else if (locked) {
+          tsEffective = { version: locked.version, source: "lockfile" };
+          tsLockfile = locked.lockfile;
+        } else if (tsKeyIsTypescript && tsInfo.satisfiable) {
+          tsEffective = {
+            version: tsInfo.resolved,
+            source: OVERRIDE_SOURCES.has(tsSpec.source) ? "override" : "declared"
+          };
+        } else if (tsKeyIsTypescript && tsSpec.raw != null) {
+          tsUndetermined = {
+            spec: String(tsSpec.raw),
+            reason: `${classifyUnresolvableSpec(tsSpec.raw)} and no installed typescript`
+          };
+        }
+      }
+      const tsEffectiveTs7 = tsEffective.version != null && isTs7Version(tsEffective.version);
+      const ts7 = tsEffectiveTs7 || !!ts7Alias;
+      const assumedTs7 = !ts7 && !!tsUndetermined && opts.strictUndetermined === true;
       const conflicts = [];
       const notices = [];
       const ignored = [];
@@ -3036,7 +3187,7 @@ var require_core = __commonJS({
           entry.severity = "warning";
           entry.partial = true;
           entry.source = dbe.source || null;
-        } else if (!ts7) {
+        } else if (!ts7 && !assumedTs7) {
           entry.severity = "warning";
         } else if (shim.present || tsIsShimAlias) {
           entry.severity = "warning";
@@ -3093,9 +3244,21 @@ var require_core = __commonJS({
           resolved: tsInfo.resolved,
           satisfiable: tsInfo.satisfiable,
           source: tsSpec.source,
+          effectiveVersion: tsEffective.version,
+          effectiveSource: tsEffective.source,
+          effectiveTs7: tsEffectiveTs7,
+          lockfile: tsLockfile,
+          inherited: !!inheritedSpec,
+          undetermined: tsUndetermined,
+          assumedTs7,
           aliasTarget: tsInfo.aliasTarget || null,
           shimAlias: tsIsShimAlias,
-          ts7Alias: ts7Alias ? { key: ts7Alias.key, raw: ts7Alias.raw, resolved: ts7Alias.resolved } : null
+          ts7Alias: ts7Alias ? {
+            key: ts7Alias.key,
+            raw: ts7Alias.raw,
+            resolved: ts7Alias.resolved,
+            source: ts7Alias.source
+          } : null
         },
         shim: shim.present || tsIsShimAlias ? {
           present: true,
@@ -3141,8 +3304,15 @@ var require_core = __commonJS({
     function analyzeDir(dir, opts = {}) {
       const { pkg, pkgPath } = readPackageJson(dir);
       const nmDirs = [dir];
-      if (opts.root && path2.resolve(opts.root) !== path2.resolve(dir)) nmDirs.push(opts.root);
-      const result = analyze(pkg, Object.assign({ nodeModulesDirs: nmDirs }, opts));
+      let rootSpec = null;
+      if (opts.root && path2.resolve(opts.root) !== path2.resolve(dir)) {
+        nmDirs.push(opts.root);
+        try {
+          rootSpec = getTypescriptSpec(readPackageJson(opts.root).pkg);
+        } catch (_) {
+        }
+      }
+      const result = analyze(pkg, Object.assign({ nodeModulesDirs: nmDirs, rootSpec }, opts));
       result.pkgPath = pkgPath;
       result.dir = dir;
       if (opts.tsconfig !== false) {
@@ -3225,6 +3395,7 @@ var require_core = __commonJS({
           0
         ),
         peerScanRan: results.some((r) => r.peerScan && r.peerScan.ran),
+        undeterminedPackages: results.filter((r) => r.typescript && r.typescript.undetermined).length,
         totalAdvisories: results.reduce((n, r) => n + (r.risks && r.risks.length || 0), 0),
         totalNotices: results.reduce((n, r) => n + (r.notices && r.notices.length || 0), 0),
         shimDetected: results.some((r) => r.shim && r.shim.present),
@@ -3256,6 +3427,10 @@ var require_core = __commonJS({
       analyzeTypescriptVersion,
       detectShim,
       detectTs7Alias,
+      isTs7Version,
+      readInstalledTypescript,
+      readLockfileTypescript,
+      classifyUnresolvableSpec,
       scanInstalledPeers,
       isUnboundedRange,
       DEFAULT_TS_TARGET,
@@ -3283,6 +3458,7 @@ var require_report = __commonJS({
       if (result.warningCount > 0) return "warning";
       if (result.advisoryCount > 0) return "advisory";
       if (result.noticeCount > 0) return "notice";
+      if (result.typescript && result.typescript.undetermined) return "undetermined";
       return "clean";
     }
     function depSeverity(conf, result) {
@@ -3294,6 +3470,11 @@ var require_report = __commonJS({
       return `${label}: ${p.pkg}${p.version ? ` ${p.version}` : ""} \u2014 declares peerDependencies.typescript "${p.range}", which excludes ${p.target}${opt}`;
     }
     var PEER_NOT_RUN = "[installed tree]  not run \u2014 no node_modules found; run npm install for full coverage";
+    function tsLabelOf(r) {
+      const t = r && r.typescript || {};
+      if (t.undetermined) return `${t.raw} \u2014 undetermined`;
+      return t.raw || "n/a";
+    }
     function noticeText(n) {
       const meta = [];
       if (n.source) meta.push(`source: ${n.source}`);
@@ -3305,23 +3486,46 @@ var require_report = __commonJS({
       const c = makeColors(!!opts.color);
       const lines = [];
       lines.push(c.bold(TITLE));
-      const tsRaw = result.typescript.raw;
-      const srcNote = result.typescript.source && result.typescript.source !== "dependencies" ? c.dim(` (via ${result.typescript.source})`) : "";
       const ts = result.typescript || {};
+      const tsRaw = ts.raw;
+      const installed = ts.effectiveSource === "node_modules";
+      const fromLock = ts.effectiveSource === "lockfile";
+      const srcMeta = [];
+      if (installed) srcMeta.push("installed");
+      if (fromLock) srcMeta.push(`locked in ${ts.lockfile}`);
+      if (ts.source && ts.source !== "dependencies") srcMeta.push(`via ${ts.source}`);
+      if (ts.inherited) srcMeta.push("inherited from the repo root");
+      const srcNote = srcMeta.length ? c.dim(` (${srcMeta.join(", ")})`) : "";
+      const exact = installed || fromLock;
       if (ts.shimAlias) {
         lines.push(
           "  " + c.green(`typescript ${tsRaw} \u2192 TS6 API shim (@typescript/typescript6)`) + c.dim(" \u2014 Compiler-API consumers resolve the TypeScript 6 API") + srcNote
         );
-      } else if (tsRaw == null) {
+      } else if (ts.undetermined) {
+        lines.push(
+          "  " + c.yellow(
+            `typescript ${tsRaw} \u2192 undetermined: ${ts.undetermined.reason}; run npm install for a definite answer`
+          )
+        );
+        if (ts.assumedTs7) {
+          lines.push(
+            "    " + c.yellow("--strict-undetermined: treated as TypeScript 7.0, so conflicts fail the build")
+          );
+        }
+      } else if (tsRaw == null && ts.effectiveVersion == null) {
         lines.push(c.dim("  typescript: not a direct dependency"));
-      } else if (result.ts7) {
-        lines.push("  " + c.red(`typescript ${tsRaw} \u2192 TypeScript 7.0 detected`) + srcNote);
+      } else if (ts.effectiveTs7) {
+        const label = exact ? `TypeScript ${ts.effectiveVersion} detected` : "TypeScript 7.0 detected";
+        lines.push("  " + c.red(`typescript ${tsRaw == null ? "(not declared)" : tsRaw} \u2192 ${label}`) + srcNote);
       } else {
-        lines.push("  " + c.green(`typescript ${tsRaw} \u2192 TypeScript 6.x (pre-7.0)`) + srcNote);
+        const label = exact && ts.effectiveVersion ? `TypeScript ${ts.effectiveVersion} (pre-7.0)` : "TypeScript 6.x (pre-7.0)";
+        lines.push("  " + c.green(`typescript ${tsRaw == null ? "(not declared)" : tsRaw} \u2192 ${label}`) + srcNote);
       }
       if (ts.ts7Alias) {
         lines.push(
-          "  " + c.red(`TypeScript 7.0 detected via "${ts.ts7Alias.key}": ${ts.ts7Alias.raw}`)
+          "  " + c.red(
+            `TypeScript 7.0 detected via "${ts.ts7Alias.key}": ${ts.ts7Alias.raw}` + (ts.ts7Alias.source === "node_modules" ? ` (installed ${ts.ts7Alias.resolved})` : "")
+          )
         );
       }
       if (result.shim && result.shim.present) {
@@ -3344,7 +3548,9 @@ var require_report = __commonJS({
       }
       if (nothing) {
         lines.push("");
-        lines.push(c.green("  \u2713 No TypeScript 7.0 / tsgo readiness issues found."));
+        lines.push(
+          ts.undetermined ? c.yellow("  \u2713 No TypeScript 7.0 / tsgo readiness issues found in what could be checked.") : c.green("  \u2713 No TypeScript 7.0 / tsgo readiness issues found.")
+        );
         if (peerNotRun) {
           lines.push("  " + c.yellow(PEER_NOT_RUN));
         }
@@ -3441,6 +3647,12 @@ var require_report = __commonJS({
         );
       } else if (result.warningCount > 0 && result.ts7) {
         lines.push(c.yellow(summary + " \u2014 nothing is build-breaking yet; review the warnings."));
+      } else if (result.warningCount > 0 && ts.undetermined) {
+        lines.push(
+          c.yellow(
+            summary + " \u2014 the TypeScript version is undetermined; nothing failed, but these break once TypeScript 7 is installed."
+          )
+        );
       } else if (result.warningCount > 0) {
         lines.push(
           c.yellow(summary + " \u2014 you are on TypeScript 6.x today, so nothing is broken yet.")
@@ -3491,7 +3703,7 @@ var require_report = __commonJS({
         const notices = r.notices || [];
         const shimNote = r.shim && r.shim.present ? c.green("  [TS6 shim]") : "";
         if (r.hasActiveConflict) {
-          lines.push("  " + c.red(`\u25CF ${rel}`) + c.dim(`  (typescript ${r.typescript.raw})`) + shimNote);
+          lines.push("  " + c.red(`\u25CF ${rel}`) + c.dim(`  (typescript ${tsLabelOf(r)})`) + shimNote);
           for (const conf of r.conflicts.filter((x) => depSeverity(x, r) === "conflict")) {
             lines.push("      " + c.red(`CONFLICT: ${conf.pkg} \u2014 ${conf.reason}`));
             lines.push("        " + c.yellow(`Fix: ${conf.fix}`));
@@ -3505,7 +3717,7 @@ var require_report = __commonJS({
           }
           for (const n of notices) lines.push("      " + c.green(noticeText(n)));
         } else if (r.warningCount > 0) {
-          lines.push("  " + c.yellow(`\u25CB ${rel}`) + c.dim(`  (typescript ${r.typescript.raw || "n/a"})`) + shimNote);
+          lines.push("  " + c.yellow(`\u25CB ${rel}`) + c.dim(`  (typescript ${tsLabelOf(r)})`) + shimNote);
           for (const conf of r.conflicts) {
             if (conf.downgradedByShim) {
               lines.push("      " + c.yellow(`WARNING: ${conf.pkg} \u2014 ${conf.reason} (downgraded: TS6 API shim present)`));
@@ -3530,12 +3742,15 @@ var require_report = __commonJS({
           lines.push("  " + c.green(`\u2713 ${rel}`) + c.dim(`  (${notices.length} TS7-ready dep(s))`) + shimNote);
           for (const n of notices) lines.push("      " + c.green(noticeText(n)));
         } else {
-          lines.push("  " + c.green(`\u2713 ${rel}`) + c.dim("  (clean)") + shimNote);
+          const und = r.typescript && r.typescript.undetermined;
+          lines.push(
+            "  " + c.green(`\u2713 ${rel}`) + c.dim(und ? `  (typescript ${tsLabelOf(r)})` : "  (clean)") + shimNote
+          );
         }
       }
       lines.push("");
       const s = agg.summary;
-      const summaryLine = `  ${s.packagesScanned} scanned \xB7 ${s.activeConflictPackages} with active conflicts \xB7 ${s.packagesWithConflicts - s.activeConflictPackages} with warnings \xB7 ${s.totalPeerFindings || 0} peer finding(s) \xB7 ${s.totalNotices || 0} notice(s) \xB7 ${s.totalAdvisories} advisory(ies) \xB7 ${s.errors} error(s)`;
+      const summaryLine = `  ${s.packagesScanned} scanned \xB7 ${s.activeConflictPackages} with active conflicts \xB7 ${s.packagesWithConflicts - s.activeConflictPackages} with warnings \xB7 ${s.undeterminedPackages || 0} undetermined \xB7 ${s.totalPeerFindings || 0} peer finding(s) \xB7 ${s.totalNotices || 0} notice(s) \xB7 ${s.totalAdvisories} advisory(ies) \xB7 ${s.errors} error(s)`;
       lines.push(s.activeConflictPackages > 0 ? c.red(summaryLine) : c.green(summaryLine));
       const peersEnabled = agg.results.some((r) => r.peerScan && !r.peerScan.disabled);
       if (peersEnabled && !s.peerScanRan) {
@@ -3694,6 +3909,31 @@ var require_sarif = __commonJS({
         if (!r) continue;
         const pkgPath = r.pkgPath || path2.join(r.dir || root, "package.json");
         const pkgUri = toPosix(path2.relative(root, pkgPath)) || "package.json";
+        const und = r.typescript && r.typescript.undetermined;
+        if (und) {
+          const ruleId = "ts7-compat/ts/undetermined";
+          ensureRule({
+            id: ruleId,
+            name: "TS7VersionUndetermined",
+            shortDescription: { text: "The effective TypeScript version could not be determined" },
+            fullDescription: {
+              text: "The typescript spec cannot be resolved to a version and nothing is installed at node_modules/typescript, so the guard states the gap instead of guessing either way."
+            },
+            helpUri: DEP_HELP,
+            help: { text: "Run npm install for a definite answer." },
+            defaultConfiguration: { level: "note" },
+            properties: { tags: ["typescript", "typescript-7", "tsgo", "undetermined"] }
+          });
+          sarifResults.push({
+            ruleId,
+            level: "note",
+            message: {
+              text: `typescript "${und.spec}" \u2192 undetermined: ${und.reason}; run npm install for a definite answer`
+            },
+            locations: [location(pkgUri, 1, 1)],
+            partialFingerprints: { ts7CompatGuard: `${pkgUri}::ts::undetermined` }
+          });
+        }
         for (const conf of r.conflicts || []) {
           const ruleId = `ts7-compat/dep/${conf.pkg}`;
           const severity = conf.severity || (r.ts7 ? "conflict" : "warning");
@@ -3957,6 +4197,7 @@ function main() {
   const useConfig = getBoolInput("config", true);
   const targetTs = getInput("target-ts", null);
   const strictPeers = getBoolInput("strict-peers", false);
+  const strictUndetermined = getBoolInput("strict-undetermined", false);
   const peers = getBoolInput("peers", true);
   if (targetTs != null && !require_semver2().valid(String(targetTs).trim())) {
     emit("error", `ts7-compat-guard: target-ts must be an exact semver version like 7.0.2, got "${targetTs}"`);
@@ -3977,7 +4218,14 @@ function main() {
   );
   const extraDb = config.db && typeof config.db === "object" ? config.db : {};
   const effectiveMode = mode === "warn" || mode === "fail" ? mode : config.mode || "fail";
-  const analyzeOpts = { extraDb, ignore, peers, strictPeers, targetTs: targetTs || void 0 };
+  const analyzeOpts = {
+    extraDb,
+    ignore,
+    peers,
+    strictPeers,
+    strictUndetermined,
+    targetTs: targetTs || void 0
+  };
   const version = safeVersion();
   if (recursive) {
     let dirs;
@@ -4008,9 +4256,14 @@ function main() {
     setOutput("notice-count", String(agg.summary.totalNotices || 0));
     setOutput("peer-count", String(agg.summary.totalPeerFindings || 0));
     setOutput("shim-detected", String(!!agg.summary.shimDetected));
-    setOutput("status", agg.summary.activeConflictPackages > 0 ? "conflict" : agg.summary.packagesWithConflicts > 0 ? "warning" : agg.summary.totalAdvisories > 0 ? "advisory" : (agg.summary.totalNotices || 0) > 0 ? "notice" : "clean");
+    setOutput("undetermined-count", String(agg.summary.undeterminedPackages || 0));
+    const rootResult = agg.results.find((r) => r.typescript && r.typescript.effectiveVersion) || null;
+    setOutput("ts-version", rootResult ? rootResult.typescript.effectiveVersion : "");
+    setOutput("ts-source", rootResult ? rootResult.typescript.effectiveSource : "");
+    setOutput("status", agg.summary.activeConflictPackages > 0 ? "conflict" : agg.summary.packagesWithConflicts > 0 ? "warning" : agg.summary.totalAdvisories > 0 ? "advisory" : (agg.summary.totalNotices || 0) > 0 ? "notice" : (agg.summary.undeterminedPackages || 0) > 0 ? "undetermined" : "clean");
     setOutput("json", JSON.stringify(json2));
     staleDbNotice(agg.results.find((r) => r.dbStale && r.dbStale.stale));
+    for (const r of agg.results) undeterminedNotice(r);
     if (peers && !agg.summary.peerScanRan) {
       emit(
         "notice",
@@ -4048,6 +4301,9 @@ Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeCon
   setOutput("notice-count", String(result.noticeCount || 0));
   setOutput("peer-count", String(result.peerFindingCount || 0));
   setOutput("shim-detected", String(!!(result.shim && result.shim.present)));
+  setOutput("ts-version", result.typescript.effectiveVersion || "");
+  setOutput("ts-source", result.typescript.effectiveSource || "");
+  setOutput("undetermined-count", String(result.typescript.undetermined ? 1 : 0));
   setOutput("status", json.status);
   setOutput("json", JSON.stringify(json));
   const anyFinding = result.conflicts.length > 0 || tsCount > 0 || result.advisoryCount > 0 || (result.noticeCount || 0) > 0 || (result.peerFindingCount || 0) > 0 || result.shim && result.shim.present;
@@ -4060,11 +4316,12 @@ Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeCon
     );
   }
   staleDbNotice(result.dbStale && result.dbStale.stale ? result : null);
+  undeterminedNotice(result);
   if (sarifFile) writeSarif([result], resolvedDir, version, sarifFile);
   appendSummary(
     `### ts7-compat-guard
 
-\`typescript\` ${result.typescript.raw || "n/a"} \u2192 ${result.ts7 ? "TypeScript 7.0 detected" : "TypeScript 6.x"} \xB7 **${result.activeConflictCount}** conflict(s), **${result.warningCount}** warning(s), **${result.peerFindingCount || 0}** installed-tree peer finding(s), **${result.advisoryCount}** advisory(ies) (status: ${json.status}).`
+\`typescript\` ${result.typescript.raw || "n/a"} \u2192 ${result.ts7 ? "TypeScript 7.0 detected" : result.typescript.undetermined ? "undetermined" : "TypeScript 6.x"} \xB7 **${result.activeConflictCount}** conflict(s), **${result.warningCount}** warning(s), **${result.peerFindingCount || 0}** installed-tree peer finding(s), **${result.advisoryCount}** advisory(ies) (status: ${json.status}).`
   );
   if (effectiveMode === "fail" && result.hasActiveConflict) {
     emit("error", `ts7-compat-guard failed: ${result.activeConflictCount} build-breaking TypeScript 7.0 conflict(s) detected.`);
@@ -4072,6 +4329,14 @@ Scanned **${agg.summary.packagesScanned}** package(s): **${agg.summary.activeCon
   } else {
     process.exitCode = 0;
   }
+}
+function undeterminedNotice(result) {
+  const und = result && result.typescript && result.typescript.undetermined;
+  if (!und) return;
+  emit(
+    "notice",
+    `ts7-compat-guard: typescript "${und.spec}" \u2192 undetermined: ${und.reason}; run npm install for a definite answer.`
+  );
 }
 function staleDbNotice(result) {
   if (!result) return;
@@ -4092,7 +4357,7 @@ function writeSarif(results, root, version, file) {
   }
 }
 function safeVersion() {
-  if (true) return "3.1.0";
+  if (true) return "3.2.0";
   try {
     const fs2 = require("node:fs");
     const path2 = require("node:path");

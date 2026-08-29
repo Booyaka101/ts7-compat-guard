@@ -54,6 +54,13 @@ inputs:
     description: Run the installed-tree peer scan. Set "false" to disable.
     required: false
     default: 'true'
+  strict-undetermined:
+    description: >-
+      Treat an undetermined TypeScript version (unresolvable spec, nothing
+      installed, no lockfile entry) as TypeScript 7, so Compiler-API conflicts
+      fail instead of passing. Off by default.
+    required: false
+    default: 'false'
 outputs:
   ts7:
     description: '"true" if the typescript dependency resolves to >= 7.0.0.'
@@ -69,8 +76,14 @@ outputs:
     description: Number of installed-tree peer findings (installed packages whose bounded peerDependencies.typescript range excludes the target TypeScript version).
   shim-detected:
     description: '"true" when the @typescript/typescript6 TS6 API shim is present (plain dependency or npm: alias layout).'
+  ts-version:
+    description: The effective TypeScript version the scan resolved (empty when undetermined).
+  ts-source:
+    description: Where that version came from — "node_modules", "lockfile", "override" or "declared".
+  undetermined-count:
+    description: Number of scanned packages whose effective TypeScript version could not be determined.
   status:
-    description: One of "conflict", "warning", "advisory", "notice", or "clean".
+    description: One of "conflict", "warning", "advisory", "notice", "undetermined", or "clean".
   json:
     description: Full JSON report as a string.
 runs:

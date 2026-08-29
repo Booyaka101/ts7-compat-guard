@@ -57,6 +57,33 @@ function buildSarif(results, opts = {}) {
     const pkgPath = r.pkgPath || path.join(r.dir || root, 'package.json');
     const pkgUri = toPosix(path.relative(root, pkgPath)) || 'package.json';
 
+    // ---- undetermined TypeScript version ----
+    const und = r.typescript && r.typescript.undetermined;
+    if (und) {
+      const ruleId = 'ts7-compat/ts/undetermined';
+      ensureRule({
+        id: ruleId,
+        name: 'TS7VersionUndetermined',
+        shortDescription: { text: 'The effective TypeScript version could not be determined' },
+        fullDescription: {
+          text: 'The typescript spec cannot be resolved to a version and nothing is installed at node_modules/typescript, so the guard states the gap instead of guessing either way.',
+        },
+        helpUri: DEP_HELP,
+        help: { text: 'Run npm install for a definite answer.' },
+        defaultConfiguration: { level: 'note' },
+        properties: { tags: ['typescript', 'typescript-7', 'tsgo', 'undetermined'] },
+      });
+      sarifResults.push({
+        ruleId,
+        level: 'note',
+        message: {
+          text: `typescript "${und.spec}" → undetermined: ${und.reason}; run npm install for a definite answer`,
+        },
+        locations: [location(pkgUri, 1, 1)],
+        partialFingerprints: { ts7CompatGuard: `${pkgUri}::ts::undetermined` },
+      });
+    }
+
     // ---- dependency conflicts ----
     for (const conf of r.conflicts || []) {
       const ruleId = `ts7-compat/dep/${conf.pkg}`;

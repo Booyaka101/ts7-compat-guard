@@ -1,0 +1,7 @@
+{
+  "name": "fixture-ts-undet-latest",
+  "devDependencies": {
+    "typescript": "latest",
+    "typescript-eslint": "^8.68.0"
+  }
+}

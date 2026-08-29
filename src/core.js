@@ -38,6 +38,9 @@ const DEP_FIELDS = [
   'peerDependencies',
 ];
 
+// getTypescriptSpec sources that are a tree-wide pin rather than a plain range.
+const OVERRIDE_SOURCES = new Set(['overrides', 'resolutions', 'pnpm.overrides']);
+
 /**
  * Extract a comparable coercion of a package.json version specifier and decide
  * whether it targets TypeScript >= 7.0.0.
@@ -121,18 +124,206 @@ function detectShim(deps) {
   return { present: false, layout: null, key: null, range: null };
 }
 
+/** Version-level TS7 test, prerelease-inclusive (7.1.0-dev.x is still TS7). */
+function isTs7Version(v) {
+  return semver.satisfies(v, '>=7.0.0', { includePrerelease: true }) || semver.major(v) >= 7;
+}
+
+/**
+ * Read the installed manifest at node_modules/<key> across `dirs` (package dir
+ * first, then repo root for hoisted monorepos; pnpm symlinks resolve on read)
+ * and return its version — only when the manifest's `name` is `typescript`.
+ * The name check is load-bearing: in the announcement's alias layout the
+ * `typescript` key installs the TS6 shim, whose manifest says
+ * `@typescript/typescript6`, and that must never read as the compiler itself.
+ * Malformed or empty manifests are skipped, never thrown on.
+ */
+function readInstalledTypescript(key, dirs) {
+  for (const dir of dirs || []) {
+    if (!dir) continue;
+    const p = path.join(dir, 'node_modules', ...key.split('/'), 'package.json');
+    try {
+      const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (
+        m &&
+        typeof m === 'object' &&
+        m.name === 'typescript' &&
+        typeof m.version === 'string' &&
+        semver.valid(m.version)
+      ) {
+        return { version: m.version };
+      }
+    } catch (_) {
+      /* absent or malformed — keep looking, then fall back to the spec */
+    }
+  }
+  return null;
+}
+
+// Committed lockfiles, in the order they are consulted. A lockfile records what
+// the installer actually resolved, so it answers the question a bare clone
+// otherwise leaves undetermined (CI runs the guard before `npm ci` all the time).
+const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock'];
+
+/** Package name behind a registry tarball URL, for alias-aware lockfile reads. */
+function nameFromResolved(url) {
+  const m = typeof url === 'string' ? url.match(/\/(@[^/]+\/[^/]+|[^/@]+)\/-\//) : null;
+  return m ? m[1] : null;
+}
+
+/**
+ * npm's lockfile. v2/v3 key packages by install path
+ * (`node_modules/@typescript/native`) and record the real `name` for aliases;
+ * v1 keys by dependency name and encodes an alias in `version`
+ * ("npm:typescript@7.0.2"). Either way the entry must resolve to `typescript`.
+ */
+function npmLockTypescript(doc, key) {
+  if (doc.packages && typeof doc.packages === 'object') {
+    const e = doc.packages['node_modules/' + key];
+    if (!e || typeof e !== 'object' || typeof e.version !== 'string') return null;
+    const name = e.name || nameFromResolved(e.resolved) || (key === 'typescript' ? 'typescript' : null);
+    return name === 'typescript' ? e.version : null;
+  }
+  if (doc.dependencies && typeof doc.dependencies === 'object') {
+    const e = doc.dependencies[key];
+    if (!e || typeof e !== 'object' || typeof e.version !== 'string') return null;
+    const alias = e.version.match(/^npm:(@?[^@]+)@(.+)$/);
+    if (alias) return alias[1] === 'typescript' ? alias[2] : null;
+    return key === 'typescript' ? e.version : null;
+  }
+  return null;
+}
+
+/**
+ * pnpm's lockfile. The importer entry carries the resolved version next to the
+ * declared specifier; otherwise fall back to the packages/snapshots keys, and
+ * only when the whole tree agrees on ONE typescript version (several means the
+ * root's copy is ambiguous from the lockfile alone, which stays undetermined
+ * rather than becoming a guess). Aliased keys are not parsed here.
+ */
+function pnpmLockTypescript(text, key) {
+  if (key !== 'typescript') return null;
+  const imp = text.match(/^[ \t]+typescript:[ \t]*\r?\n[ \t]+specifier:.*\r?\n[ \t]+version:[ \t]*([^\s(]+)/m);
+  if (imp) return imp[1].replace(/^['"]|['"]$/g, '');
+  const seen = new Set();
+  const re = /^[ \t]{2,}\/?typescript@([0-9][^:\s(]*)/gm;
+  let m;
+  while ((m = re.exec(text))) seen.add(m[1]);
+  return seen.size === 1 ? Array.from(seen)[0] : null;
+}
+
+/**
+ * yarn's lockfile, classic (`version "7.0.2"`) and berry (`version: 7.0.2`).
+ * Entry headers list every spec that resolved to the same version; berry
+ * `patch:` entries repeat a version already seen, so deduping settles them.
+ * Several distinct versions means ambiguous — undetermined, not a guess.
+ */
+function yarnLockTypescript(text, key) {
+  if (key !== 'typescript') return null;
+  const lines = text.split(/\r?\n/);
+  const seen = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    const head = lines[i];
+    if (!head.trim() || /^[ \t#]/.test(head) || !head.trim().endsWith(':')) continue;
+    const specs = head
+      .trim()
+      .replace(/:$/, '')
+      .split(',')
+      .map((s) => s.trim().replace(/^["']|["']$/g, ''));
+    // "typescript@npm:@other/pkg@1" aliases this key to something else.
+    const isTs = specs.some((s) => /^typescript@/.test(s) && !/^typescript@npm:(?!typescript[@:])/.test(s));
+    if (!isTs) continue;
+    for (let j = i + 1; j < lines.length && /^[ \t]/.test(lines[j]); j++) {
+      const v = lines[j].match(/^[ \t]+version:?[ \t]+["']?([^"'\s]+)["']?[ \t]*$/);
+      if (v) {
+        seen.add(v[1]);
+        break;
+      }
+    }
+  }
+  return seen.size === 1 ? Array.from(seen)[0] : null;
+}
+
+/**
+ * Resolve `key`'s typescript version from a committed lockfile. This is the
+ * answer for the case installed resolution cannot reach: a fresh clone, or CI
+ * running the guard before `npm ci`. Still fully offline and manifest-level.
+ * Unreadable or ambiguous lockfiles return null and never throw.
+ */
+function readLockfileTypescript(key, dirs) {
+  for (const dir of dirs || []) {
+    if (!dir) continue;
+    for (const file of LOCKFILES) {
+      let text;
+      try {
+        text = stripBom(fs.readFileSync(path.join(dir, file), 'utf8'));
+      } catch (_) {
+        continue;
+      }
+      let v = null;
+      try {
+        if (file === 'yarn.lock') v = yarnLockTypescript(text, key);
+        else if (file === 'pnpm-lock.yaml') v = pnpmLockTypescript(text, key);
+        else v = npmLockTypescript(JSON.parse(text), key);
+      } catch (_) {
+        v = null; // malformed lockfile proves nothing
+      }
+      if (typeof v === 'string' && semver.valid(v)) return { version: v, lockfile: file };
+    }
+  }
+  return null;
+}
+
+/**
+ * Short label for a spec neither semver.minVersion nor semver.coerce can
+ * resolve — used by the undetermined report line to say *why*.
+ */
+function classifyUnresolvableSpec(raw) {
+  let s = String(raw == null ? '' : raw).trim();
+  const npmAlias = s.match(/^npm:(@?[^@]+)@(.+)$/);
+  if (npmAlias) s = npmAlias[2].trim();
+  else if (s.startsWith('npm:')) s = '';
+  if (/^workspace:/.test(s)) return 'workspace protocol spec';
+  if (/^catalog:/.test(s)) return 'catalog spec';
+  if (/^(git|git\+|github:|gitlab:|bitbucket:)/.test(s) || /^https?:/.test(s)) return 'git/url spec';
+  if (/^(file|link|portal):/.test(s)) return 'file spec';
+  if (s === '' || s === '*') return 'wildcard spec';
+  return 'dist-tag spec';
+}
+
 /**
  * Detect TypeScript 7 installed under an alias — any dependency key whose spec
- * is `npm:typescript@<range>` with a floor >= 7.0.0 (the announcement's
- * side-by-side layout uses `"@typescript/native": "npm:typescript@^7.0.2"`).
+ * is `npm:typescript@<range>` (the announcement's side-by-side layout uses
+ * `"@typescript/native": "npm:typescript@^7.0.2"`). The version actually
+ * installed at that key wins over the declared floor: an aliased install that
+ * resolved below 7 is not TS7 evidence, and an unresolvable aliased spec
+ * (`npm:typescript@latest`) still reads as TS7 once 7.x is installed there.
  * The `typescript` key itself is handled by getTypescriptSpec.
  */
-function detectTs7Alias(deps) {
+function detectTs7Alias(deps, nmDirs) {
   for (const [key, value] of Object.entries(deps || {})) {
     if (key === 'typescript') continue;
     const info = analyzeTypescriptVersion(value);
-    if (info.aliasTarget === 'typescript' && info.ts7) {
-      return { key, raw: String(value), resolved: info.resolved };
+    if (info.aliasTarget !== 'typescript') continue;
+    const resolvedAt =
+      readInstalledTypescript(key, nmDirs) ||
+      (() => {
+        const l = readLockfileTypescript(key, nmDirs);
+        return l ? { version: l.version, source: 'lockfile' } : null;
+      })();
+    if (resolvedAt) {
+      if (isTs7Version(resolvedAt.version)) {
+        return {
+          key,
+          raw: String(value),
+          resolved: resolvedAt.version,
+          source: resolvedAt.source || 'node_modules',
+        };
+      }
+      continue;
+    }
+    if (info.ts7) {
+      return { key, raw: String(value), resolved: info.resolved, source: 'declared' };
     }
   }
   return null;
@@ -391,6 +582,11 @@ function mergeDeps(pkg) {
   );
 }
 
+// npm itself tolerates a UTF-8 BOM (common in Windows-authored files).
+function stripBom(text) {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
 function readPackageJson(dir) {
   const pkgPath = path.join(dir, 'package.json');
   if (!fs.existsSync(pkgPath)) {
@@ -407,7 +603,7 @@ function readPackageJson(dir) {
     throw err;
   }
   try {
-    return { pkg: JSON.parse(text), pkgPath };
+    return { pkg: JSON.parse(stripBom(text)), pkgPath };
   } catch (e) {
     const err = new Error(`Invalid JSON in ${pkgPath}: ${e.message}`);
     err.code = 'EBADPKG';
@@ -425,7 +621,7 @@ function loadConfig(dir) {
   if (!fs.existsSync(cfgPath)) return {};
   let cfg;
   try {
-    cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    cfg = JSON.parse(stripBom(fs.readFileSync(cfgPath, 'utf8')));
   } catch (e) {
     const err = new Error(`Invalid JSON in ${cfgPath}: ${e.message}`);
     err.code = 'EBADCONFIG';
@@ -455,15 +651,61 @@ function analyze(pkg, opts = {}) {
   const ignore = new Set(opts.ignore || []);
 
   const deps = mergeDeps(pkg);
-  const tsSpec = getTypescriptSpec(pkg);
+  // A workspace package that declares no typescript inherits the repo root's
+  // spec, the same way it already inherits the root's hoisted install.
+  let tsSpec = getTypescriptSpec(pkg);
+  const inheritedSpec =
+    tsSpec.raw == null && opts.rootSpec && opts.rootSpec.raw != null ? opts.rootSpec : null;
+  if (inheritedSpec) tsSpec = { raw: inheritedSpec.raw, source: inheritedSpec.source };
   const tsInfo = analyzeTypescriptVersion(tsSpec.raw);
+  const nmDirs = opts.nodeModulesDirs || [];
   const shim = detectShim(deps);
-  const ts7Alias = detectTs7Alias(deps);
+  const ts7Alias = detectTs7Alias(deps, nmDirs);
   // `typescript` aliased to the shim means the API-consuming half of the
   // side-by-side layout — TS6 semantics for Compiler-API consumers.
   const tsIsShimAlias = tsInfo.aliasTarget === SHIM_PACKAGE;
-  const ts7 = tsInfo.ts7 || !!ts7Alias;
-  const nmDirs = opts.nodeModulesDirs || [];
+
+  // Effective TypeScript for the `typescript` key itself: the version actually
+  // installed wins over any declared spec (a spec is an intent, the installed
+  // tree is a fact — "latest" resolves to whatever npm installed, 7.0.2 as of
+  // 2026-08-29); an overrides/resolutions pin wins over a plain declared range
+  // only when nothing is installed (getTypescriptSpec already ordered that).
+  // Unresolvable spec + nothing installed = the third state: undetermined,
+  // stated explicitly and never turned into a conflict.
+  let tsEffective = { version: null, source: null };
+  let tsUndetermined = null;
+  // A `typescript` key aliased to some other package describes THAT package's
+  // versions — never the compiler's. Installed resolution still applies (the
+  // manifest-name check tells the truth about what actually resolved there).
+  const tsKeyIsTypescript = tsInfo.aliasTarget == null || tsInfo.aliasTarget === 'typescript';
+  let tsLockfile = null;
+  if (!tsIsShimAlias) {
+    const installed = readInstalledTypescript('typescript', nmDirs);
+    const locked = installed ? null : readLockfileTypescript('typescript', nmDirs);
+    if (installed) {
+      tsEffective = { version: installed.version, source: 'node_modules' };
+    } else if (locked) {
+      // A committed lockfile is a resolution that already happened, so it beats
+      // an override pin (which only says what a future install *would* do).
+      tsEffective = { version: locked.version, source: 'lockfile' };
+      tsLockfile = locked.lockfile;
+    } else if (tsKeyIsTypescript && tsInfo.satisfiable) {
+      tsEffective = {
+        version: tsInfo.resolved,
+        source: OVERRIDE_SOURCES.has(tsSpec.source) ? 'override' : 'declared',
+      };
+    } else if (tsKeyIsTypescript && tsSpec.raw != null) {
+      tsUndetermined = {
+        spec: String(tsSpec.raw),
+        reason: `${classifyUnresolvableSpec(tsSpec.raw)} and no installed typescript`,
+      };
+    }
+  }
+  const tsEffectiveTs7 = tsEffective.version != null && isTs7Version(tsEffective.version);
+  const ts7 = tsEffectiveTs7 || !!ts7Alias;
+  // --strict-undetermined: an unprovable version is treated as TypeScript 7 for
+  // severity, so a scan that cannot prove safety fails instead of passing.
+  const assumedTs7 = !ts7 && !!tsUndetermined && opts.strictUndetermined === true;
 
   const conflicts = [];
   const notices = [];
@@ -516,7 +758,7 @@ function analyze(pkg, opts = {}) {
       entry.severity = 'warning';
       entry.partial = true;
       entry.source = dbe.source || null;
-    } else if (!ts7) {
+    } else if (!ts7 && !assumedTs7) {
       entry.severity = 'warning';
     } else if (shim.present || tsIsShimAlias) {
       // The shim restores the programmatic API for Compiler-API consumers, so
@@ -585,9 +827,23 @@ function analyze(pkg, opts = {}) {
       resolved: tsInfo.resolved,
       satisfiable: tsInfo.satisfiable,
       source: tsSpec.source,
+      effectiveVersion: tsEffective.version,
+      effectiveSource: tsEffective.source,
+      effectiveTs7: tsEffectiveTs7,
+      lockfile: tsLockfile,
+      inherited: !!inheritedSpec,
+      undetermined: tsUndetermined,
+      assumedTs7,
       aliasTarget: tsInfo.aliasTarget || null,
       shimAlias: tsIsShimAlias,
-      ts7Alias: ts7Alias ? { key: ts7Alias.key, raw: ts7Alias.raw, resolved: ts7Alias.resolved } : null,
+      ts7Alias: ts7Alias
+        ? {
+            key: ts7Alias.key,
+            raw: ts7Alias.raw,
+            resolved: ts7Alias.resolved,
+            source: ts7Alias.source,
+          }
+        : null,
     },
     shim: shim.present || tsIsShimAlias
       ? {
@@ -659,8 +915,16 @@ function analyzeDir(dir, opts = {}) {
   // Effective versions prefer what is actually installed: this package's own
   // node_modules first, then the repo root's (hoisted workspaces).
   const nmDirs = [dir];
-  if (opts.root && path.resolve(opts.root) !== path.resolve(dir)) nmDirs.push(opts.root);
-  const result = analyze(pkg, Object.assign({ nodeModulesDirs: nmDirs }, opts));
+  let rootSpec = null;
+  if (opts.root && path.resolve(opts.root) !== path.resolve(dir)) {
+    nmDirs.push(opts.root);
+    try {
+      rootSpec = getTypescriptSpec(readPackageJson(opts.root).pkg);
+    } catch (_) {
+      /* no readable root manifest — nothing to inherit */
+    }
+  }
+  const result = analyze(pkg, Object.assign({ nodeModulesDirs: nmDirs, rootSpec }, opts));
   result.pkgPath = pkgPath;
   result.dir = dir;
 
@@ -766,6 +1030,7 @@ function analyzeMany(dirs, opts = {}) {
       0
     ),
     peerScanRan: results.some((r) => r.peerScan && r.peerScan.ran),
+    undeterminedPackages: results.filter((r) => r.typescript && r.typescript.undetermined).length,
     totalAdvisories: results.reduce((n, r) => n + ((r.risks && r.risks.length) || 0), 0),
     totalNotices: results.reduce((n, r) => n + ((r.notices && r.notices.length) || 0), 0),
     shimDetected: results.some((r) => r.shim && r.shim.present),
@@ -807,6 +1072,10 @@ module.exports = {
   analyzeTypescriptVersion,
   detectShim,
   detectTs7Alias,
+  isTs7Version,
+  readInstalledTypescript,
+  readLockfileTypescript,
+  classifyUnresolvableSpec,
   scanInstalledPeers,
   isUnboundedRange,
   DEFAULT_TS_TARGET,

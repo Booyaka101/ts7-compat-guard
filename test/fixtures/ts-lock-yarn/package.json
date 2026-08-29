@@ -1,0 +1,7 @@
+{
+  "name": "fixture-ts-lock-yarn",
+  "devDependencies": {
+    "typescript": "*",
+    "ts-morph": "^22.0.0"
+  }
+}
