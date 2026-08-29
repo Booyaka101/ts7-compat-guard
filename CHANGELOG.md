@@ -43,15 +43,40 @@ The declared spec is an intent; `node_modules` is a fact.
   `typescript latest → TypeScript 7.0.2 detected (installed, via
   devDependencies)`; TypeScript installed but not declared reports
   `typescript (not declared) → … (installed)`.
+- **Lockfile resolution.** When nothing is installed, a committed
+  `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml` or `yarn.lock`
+  is read for the resolved typescript version. This is the case installed
+  resolution cannot reach and the one CI hits constantly: a bare `git clone`,
+  or the guard running before `npm ci`. Alias-aware (npm v1's
+  `"npm:typescript@7.0.2"` and v2/v3's `name`/`resolved` fields), so the TS6
+  shim locked under the `typescript` key still never reads as the compiler.
+  A lockfile beats an override pin: it records a resolution that already
+  happened, while a pin only says what a future install would do. Malformed
+  lockfiles, and trees holding two different typescript versions, fall through
+  to the next source instead of guessing. Still fully offline.
+- **`--strict-undetermined`** (CLI) / `strict-undetermined` (Action): treat an
+  undetermined version as TypeScript 7 so Compiler-API conflicts fail instead
+  of passing. Off by default, symmetrical with `--strict-peers`.
+- `status` is no longer `"clean"` for a scan that proved nothing: an
+  undetermined version reports the new `"undetermined"` status, so a CI job
+  gating on the field cannot mistake an unprovable scan for a green light.
+- A workspace package that declares no `typescript` now inherits the repo
+  root's declared spec, the same way it already inherited the root's hoisted
+  install. Previously two packages in one tree could disagree.
+- Action outputs **`ts-version`**, **`ts-source`** and
+  **`undetermined-count`**; the recursive summary counts undetermined
+  packages (`summary.undeterminedPackages`).
 - Measured before shipping on the 15-repo corpus from v3.1 (see the PR):
   verdict flips hand-verified against each repo's actual
   `node_modules/typescript/package.json`.
-- 31 new tests (214 total).
+- 50 new tests (233 total).
 
 ### Fixed
-- A repo on `"typescript": "latest"` with TS 7.0.2 installed now reports
-  **TypeScript 7.0.2 detected** and fails `--mode fail` on Compiler-API
-  conflicts, instead of "not TS7" + warnings + exit 0.
+- A repo on `"typescript": "latest"` with TS 7.0.2 installed **or locked** now
+  reports **TypeScript 7.0.2 detected** and fails `--mode fail` on
+  Compiler-API conflicts, instead of "not TS7" + warnings + exit 0.
+- `package.json` and `.ts7guardrc.json` with a UTF-8 BOM no longer fail to
+  parse. npm accepts one, so the guard does too.
 
 ## [3.1.0] - 2026-08-11
 

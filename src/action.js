@@ -130,6 +130,7 @@ function main() {
   const useConfig = getBoolInput('config', true);
   const targetTs = getInput('target-ts', null);
   const strictPeers = getBoolInput('strict-peers', false);
+  const strictUndetermined = getBoolInput('strict-undetermined', false);
   const peers = getBoolInput('peers', true);
 
   if (targetTs != null && !require('semver').valid(String(targetTs).trim())) {
@@ -159,7 +160,14 @@ function main() {
     );
   const extraDb = config.db && typeof config.db === 'object' ? config.db : {};
   const effectiveMode = mode === 'warn' || mode === 'fail' ? mode : config.mode || 'fail';
-  const analyzeOpts = { extraDb, ignore, peers, strictPeers, targetTs: targetTs || undefined };
+  const analyzeOpts = {
+    extraDb,
+    ignore,
+    peers,
+    strictPeers,
+    strictUndetermined,
+    targetTs: targetTs || undefined,
+  };
   const version = safeVersion();
 
   if (recursive) {
@@ -192,7 +200,11 @@ function main() {
     setOutput('notice-count', String(agg.summary.totalNotices || 0));
     setOutput('peer-count', String(agg.summary.totalPeerFindings || 0));
     setOutput('shim-detected', String(!!agg.summary.shimDetected));
-    setOutput('status', agg.summary.activeConflictPackages > 0 ? 'conflict' : agg.summary.packagesWithConflicts > 0 ? 'warning' : agg.summary.totalAdvisories > 0 ? 'advisory' : (agg.summary.totalNotices || 0) > 0 ? 'notice' : 'clean');
+    setOutput('undetermined-count', String(agg.summary.undeterminedPackages || 0));
+    const rootResult = agg.results.find((r) => r.typescript && r.typescript.effectiveVersion) || null;
+    setOutput('ts-version', rootResult ? rootResult.typescript.effectiveVersion : '');
+    setOutput('ts-source', rootResult ? rootResult.typescript.effectiveSource : '');
+    setOutput('status', agg.summary.activeConflictPackages > 0 ? 'conflict' : agg.summary.packagesWithConflicts > 0 ? 'warning' : agg.summary.totalAdvisories > 0 ? 'advisory' : (agg.summary.totalNotices || 0) > 0 ? 'notice' : (agg.summary.undeterminedPackages || 0) > 0 ? 'undetermined' : 'clean');
     setOutput('json', JSON.stringify(json));
     staleDbNotice(agg.results.find((r) => r.dbStale && r.dbStale.stale));
     for (const r of agg.results) undeterminedNotice(r);
@@ -242,6 +254,9 @@ function main() {
   setOutput('notice-count', String(result.noticeCount || 0));
   setOutput('peer-count', String(result.peerFindingCount || 0));
   setOutput('shim-detected', String(!!(result.shim && result.shim.present)));
+  setOutput('ts-version', result.typescript.effectiveVersion || '');
+  setOutput('ts-source', result.typescript.effectiveSource || '');
+  setOutput('undetermined-count', String(result.typescript.undetermined ? 1 : 0));
   setOutput('status', json.status);
   setOutput('json', JSON.stringify(json));
 

@@ -1,0 +1,19 @@
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      ts-morph:
+        specifier: ^22.0.0
+        version: 22.0.0
+      typescript:
+        specifier: latest
+        version: 7.0.2
+
+packages:
+
+  typescript@7.0.2:
+    resolution: {integrity: sha512-fake}
+    engines: {node: '>=14.17'}
+    hasBin: true

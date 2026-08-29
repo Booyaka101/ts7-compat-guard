@@ -1584,6 +1584,244 @@ if (fs.existsSync(DIST)) {
   });
 }
 
+// ==================== v3.2: lockfile resolution ====================
+section('v3.2: lockfile resolution');
+test('npm lockfile v3 resolves typescript for a bare clone -> TS7, exit 1', () => {
+  const r = core.analyzeDir(FIX('ts-lock-npm'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+  assert.strictEqual(r.typescript.effectiveSource, 'lockfile');
+  assert.strictEqual(r.typescript.lockfile, 'package-lock.json');
+  assert.strictEqual(r.typescript.undetermined, null);
+  assert.strictEqual(r.conflicts[0].severity, 'conflict');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+test('pnpm lockfile importer entry resolves typescript', () => {
+  const r = core.analyzeDir(FIX('ts-lock-pnpm'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveSource, 'lockfile');
+  assert.strictEqual(r.typescript.lockfile, 'pnpm-lock.yaml');
+});
+test('yarn classic lockfile resolves typescript from a multi-spec header', () => {
+  const r = core.analyzeDir(FIX('ts-lock-yarn'));
+  assert.strictEqual(r.ts7, true);
+  assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+  assert.strictEqual(r.typescript.lockfile, 'yarn.lock');
+});
+test('installed tree still beats the lockfile', () => {
+  const dir = TMP('.tmp-lockvsinst');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: 'latest' } }),
+    'package-lock.json': JSON.stringify({
+      lockfileVersion: 3,
+      packages: { 'node_modules/typescript': { version: '7.0.2' } },
+    }),
+    'node_modules/typescript/package.json': JSON.stringify({ name: 'typescript', version: '6.5.1' }),
+  });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.typescript.effectiveVersion, '6.5.1');
+    assert.strictEqual(r.typescript.effectiveSource, 'node_modules');
+    assert.strictEqual(r.ts7, false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('lockfile beats an overrides pin (a pin is intent, a lock already resolved)', () => {
+  const dir = TMP('.tmp-lockvspin');
+  writeTree(dir, {
+    'package.json': JSON.stringify({
+      devDependencies: { typescript: 'latest' },
+      overrides: { typescript: '^6.5.0' },
+    }),
+    'package-lock.json': JSON.stringify({
+      lockfileVersion: 3,
+      packages: { 'node_modules/typescript': { version: '7.0.2' } },
+    }),
+  });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.typescript.effectiveSource, 'lockfile');
+    assert.strictEqual(r.ts7, true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('lockfile v1 alias form; aliased key resolves, foreign alias rejected', () => {
+  const dir = TMP('.tmp-lockv1');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { '@typescript/native': 'npm:typescript@latest' } }),
+    'package-lock.json': JSON.stringify({
+      lockfileVersion: 1,
+      dependencies: { '@typescript/native': { version: 'npm:typescript@7.0.2' } },
+    }),
+  });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.ts7, true);
+    assert.strictEqual(r.typescript.ts7Alias.resolved, '7.0.2');
+    assert.strictEqual(r.typescript.ts7Alias.source, 'lockfile');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert.strictEqual(
+    core.readLockfileTypescript('typescript', [FIX('ts7-alias-installed')]),
+    null,
+    'no lockfile there'
+  );
+});
+test('the shim locked under the typescript key never reads as the compiler', () => {
+  const dir = TMP('.tmp-lockshim');
+  writeTree(dir, {
+    'package.json': JSON.stringify({
+      devDependencies: { typescript: 'npm:@typescript/typescript6@^6.0.2', 'ts-morph': '^22.0.0' },
+    }),
+    'package-lock.json': JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        'node_modules/typescript': {
+          name: '@typescript/typescript6',
+          version: '6.0.2',
+          resolved: 'https://registry.npmjs.org/@typescript/typescript6/-/typescript6-6.0.2.tgz',
+        },
+      },
+    }),
+  });
+  try {
+    assert.strictEqual(core.readLockfileTypescript('typescript', [dir]), null);
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(r.typescript.shimAlias, true);
+    assert.strictEqual(r.typescript.effectiveVersion, null);
+    assert.strictEqual(r.shim.present, true);
+    assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('malformed / ambiguous lockfiles stay undetermined, never throw', () => {
+  const dir = TMP('.tmp-lockbad');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: 'latest' } }),
+    'package-lock.json': '{ not json',
+  });
+  try {
+    assert.strictEqual(core.analyzeDir(dir).typescript.undetermined.spec, 'latest');
+    fs.writeFileSync(
+      path.join(dir, 'yarn.lock'),
+      'typescript@^6:\n  version "6.5.1"\n\ntypescript@^7:\n  version "7.0.2"\n'
+    );
+    fs.rmSync(path.join(dir, 'package-lock.json'));
+    assert.ok(core.analyzeDir(dir).typescript.undetermined, 'two versions is ambiguous');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+section('v3.2: --strict-undetermined');
+test('promotes undetermined ledger warnings to conflicts, exit 1', () => {
+  const r = core.analyzeDir(FIX('ts-undet-latest'), { strictUndetermined: true });
+  assert.strictEqual(r.ts7, false);
+  assert.strictEqual(r.typescript.assumedTs7, true);
+  assert.strictEqual(r.conflicts[0].severity, 'conflict');
+  assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+});
+test('off by default, and never fires when the version IS determined', () => {
+  assert.strictEqual(core.analyzeDir(FIX('ts-undet-latest')).typescript.assumedTs7, false);
+  const r = core.analyzeDir(FIX('ts-installed-wins'), { strictUndetermined: true });
+  assert.strictEqual(r.typescript.assumedTs7, false);
+});
+test('CLI --strict-undetermined -> CONFLICT + exit 1, warn mode still 0', () => {
+  const { code, out } = runCli(['--dir', FIX('ts-undet-latest'), '--strict-undetermined']);
+  assert.ok(/CONFLICT: typescript-eslint/.test(out), out);
+  assert.ok(/--strict-undetermined: treated as TypeScript 7\.0/.test(out), out);
+  assert.strictEqual(code, 1);
+  assert.strictEqual(
+    runCli(['--dir', FIX('ts-undet-latest'), '--strict-undetermined', '--mode', 'warn']).code,
+    0
+  );
+});
+test('action strict-undetermined input -> ::error:: + exit 1', () => {
+  const r = spawnAction({
+    'INPUT_PACKAGE-DIR': FIX('ts-undet-latest'),
+    INPUT_MODE: 'fail',
+    'INPUT_STRICT-UNDETERMINED': 'true',
+  });
+  assert.strictEqual(r.status, 1, r.stdout);
+  assert.ok(/::error::CONFLICT: typescript-eslint/.test(r.stdout), r.stdout);
+});
+
+section('v3.2: undetermined status + monorepo inheritance');
+test('an undetermined scan with zero findings is not reported clean', () => {
+  const dir = TMP('.tmp-undetclean');
+  writeTree(dir, { 'package.json': JSON.stringify({ devDependencies: { typescript: 'latest' } }) });
+  try {
+    const r = core.analyzeDir(dir);
+    assert.strictEqual(report.statusOf(r), 'undetermined');
+    assert.strictEqual(report.jsonReport(r).status, 'undetermined');
+    const text = report.humanReport(r, { color: false }).join('\n');
+    assert.ok(/found in what could be checked/.test(text), text);
+    assert.strictEqual(core.exitCodeFor(r, 'fail'), 0);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('determined + no findings is still plain clean', () => {
+  assert.strictEqual(report.jsonReport(core.analyzeDir(FIX('ts7-clean'))).status, 'clean');
+});
+test('workspace package inherits the root declared spec when nothing is installed', () => {
+  const root = TMP('.tmp-inherit');
+  writeTree(root, {
+    'package.json': JSON.stringify({ name: 'root', devDependencies: { typescript: '^7.0.2' } }),
+    'packages/a/package.json': JSON.stringify({ name: 'a', devDependencies: { 'ts-morph': '^22.0.0' } }),
+  });
+  try {
+    const r = core.analyzeDir(path.join(root, 'packages', 'a'), { root });
+    assert.strictEqual(r.ts7, true);
+    assert.strictEqual(r.typescript.inherited, true);
+    assert.strictEqual(r.typescript.effectiveVersion, '7.0.2');
+    assert.strictEqual(r.conflicts[0].severity, 'conflict');
+    const text = report.humanReport(r, { color: false }).join('\n');
+    assert.ok(/inherited from the repo root/.test(text), text);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+test('a package declaring its own typescript never inherits', () => {
+  const root = TMP('.tmp-noinherit');
+  writeTree(root, {
+    'package.json': JSON.stringify({ name: 'root', devDependencies: { typescript: '^7.0.2' } }),
+    'packages/a/package.json': JSON.stringify({ devDependencies: { typescript: '^6.2.0' } }),
+  });
+  try {
+    const r = core.analyzeDir(path.join(root, 'packages', 'a'), { root });
+    assert.strictEqual(r.ts7, false);
+    assert.strictEqual(r.typescript.inherited, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+test('recursive summary counts undetermined packages + JSON/Action surfaces', () => {
+  const agg = core.analyzeMany([FIX('ts-undet-latest'), FIX('ts-installed-latest')]);
+  assert.strictEqual(agg.summary.undeterminedPackages, 1);
+  const text = report.humanReportMany(agg, { color: false, root: FIX('ts-undet-latest') }).join('\n');
+  assert.ok(/1 undetermined/.test(text), text);
+});
+test('action emits ts-version / ts-source / undetermined-count outputs', () => {
+  const outFile = path.join(__dirname, '.tmp-ghout4');
+  fs.writeFileSync(outFile, '');
+  const r = spawnAction({
+    'INPUT_PACKAGE-DIR': FIX('ts-installed-latest'),
+    INPUT_MODE: 'warn',
+    GITHUB_OUTPUT: outFile,
+  });
+  assert.strictEqual(r.status, 0, r.stdout);
+  const outs = fs.readFileSync(outFile, 'utf8');
+  assert.ok(/ts-version<<[\s\S]*?7\.0\.2/.test(outs), outs);
+  assert.ok(/ts-source<<[\s\S]*?node_modules/.test(outs), outs);
+  assert.ok(/undetermined-count<<[\s\S]*?0/.test(outs), outs);
+  fs.unlinkSync(outFile);
+});
+
 // -------------------- summary --------------------
 Promise.all(pending).then(() => {
   process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

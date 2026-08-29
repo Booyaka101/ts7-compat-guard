@@ -10,7 +10,31 @@ Date: 2026-08-29 (v3.1.0 shipped 2026-08-11; v3.0.0 2026-07-29)
 - TS 7.0 announcement devblog → both @typescript/typescript6 shim layouts still documented ✓
 - COST: none. LESSONS.md: no contradictions (and one new bullet appended, see below).
 
-## What v3.2 adds (all VERIFIED working, 215/215 tests green — baseline was 183)
+## Second pass (2026-08-29, same PR): the review findings are BUILT, not just noted
+All VERIFIED, 233/233 tests green.
+- **Lockfile resolution** (`readLockfileTypescript`): package-lock.json /
+  npm-shrinkwrap.json (v1 alias `npm:typescript@x` + v2/v3 name/resolved),
+  pnpm-lock.yaml (importer entry, else unambiguous packages key), yarn.lock
+  (classic + berry, multi-spec headers, patch entries deduped). Alias-aware, so
+  the shim locked under the typescript key is still rejected. Ambiguous or
+  malformed lockfiles fall through, never throw. Precedence is now
+  installed > lockfile > override pin > declared.
+- **`--strict-undetermined`** CLI flag + Action input: undetermined is treated
+  as TS7 for severity, so the scan fails instead of passing. Off by default.
+- **status `'undetermined'`** replaces the false `'clean'` for a scan that
+  proved nothing; the human "no issues found" line says "in what could be
+  checked" in that case.
+- **Monorepo spec inheritance**: a workspace package declaring no typescript
+  inherits the root's declared spec (it already inherited the root's install).
+- **Action outputs** `ts-version`, `ts-source`, `undetermined-count`;
+  recursive summary gains `undeterminedPackages` and a report column.
+- House-rule clone check run: `readInstalledTypescript` vs
+  `resolveEffectiveVersion` = 0.26 line similarity (shared lines are loop and
+  try/catch scaffolding only), well under the 60% extract-the-mechanism bar.
+  Kept separate deliberately: merging them would need a name-filter parameter,
+  which is the many-parameter driver the rule warns against.
+
+## What v3.2 adds (all VERIFIED working — baseline was 183)
 - Effective TypeScript resolution in src/core.js: `readInstalledTypescript(key, nmDirs)`
   reads node_modules/typescript/package.json (package dir → repo root, symlinks
   resolve on read) and any `npm:typescript@…`-aliased key's installed dir; the
@@ -35,6 +59,12 @@ reported as installed). Zero false flips on pinned repos is the pass criterion;
 the flip population is unpinned specs, proven in the E2E below.
 
 ## E2E (real npm installs, scratch-measure/e2e-worked)
+- Bare-clone case (lockfile present, node_modules deleted): "typescript latest
+  → TypeScript 7.0.2 detected (locked in package-lock.json, via
+  devDependencies)" + CONFLICT, exit 1. Before the second pass this was
+  undetermined + exit 0.
+- Lockfile also removed, with --strict-undetermined: undetermined line plus
+  "treated as TypeScript 7.0, so conflicts fail the build", CONFLICT, exit 1.
 - {"typescript":"latest","typescript-eslint":"^8.68.0"}:
   - npm install (DEFAULT strict peers): npm BACKTRACKS latest → installs
     typescript 6.0.3 (!). Scan: "TypeScript 6.0.3 (pre-7.0) (installed, via
@@ -48,7 +78,7 @@ the flip population is unpinned specs, proven in the E2E below.
   require('ts7-compat-guard') loads, version 3.2.0.
 
 ## Acceptance checks — ALL VERIFIED (2026-08-29)
-a. npm test → 215 passed, 0 failed. ✓
+a. npm test → 233 passed, 0 failed. ✓
 b. Worked example end to end (above). ✓
 c. npm run build → dist/action.js (3.2.0 injected) committed; build:check
    clean once committed (it diffs against the committed dist). ✓

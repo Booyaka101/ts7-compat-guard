@@ -11,6 +11,9 @@ function statusOf(result) {
   if (result.warningCount > 0) return 'warning';
   if (result.advisoryCount > 0) return 'advisory';
   if (result.noticeCount > 0) return 'notice';
+  // Never report a green light for a scan that proved nothing: an unresolvable
+  // TypeScript version is a coverage gap, not a clean bill of health.
+  if (result.typescript && result.typescript.undetermined) return 'undetermined';
   return 'clean';
 }
 
@@ -60,10 +63,14 @@ function humanReport(result, opts = {}) {
   const ts = result.typescript || {};
   const tsRaw = ts.raw;
   const installed = ts.effectiveSource === 'node_modules';
+  const fromLock = ts.effectiveSource === 'lockfile';
   const srcMeta = [];
   if (installed) srcMeta.push('installed');
+  if (fromLock) srcMeta.push(`locked in ${ts.lockfile}`);
   if (ts.source && ts.source !== 'dependencies') srcMeta.push(`via ${ts.source}`);
+  if (ts.inherited) srcMeta.push('inherited from the repo root');
   const srcNote = srcMeta.length ? c.dim(` (${srcMeta.join(', ')})`) : '';
+  const exact = installed || fromLock;
   if (ts.shimAlias) {
     // The announcement's side-by-side layout: `typescript` aliased to the shim.
     lines.push(
@@ -74,21 +81,28 @@ function humanReport(result, opts = {}) {
     );
   } else if (ts.undetermined) {
     // Same posture as the peer-scan "not run" note: an unresolvable spec with
-    // nothing installed is a stated coverage gap, never a guess either way.
+    // nothing installed and no lockfile entry is a stated coverage gap, never a
+    // guess either way.
     lines.push(
       '  ' +
         c.yellow(
           `typescript ${tsRaw} → undetermined: ${ts.undetermined.reason}; run npm install for a definite answer`
         )
     );
+    if (ts.assumedTs7) {
+      lines.push(
+        '    ' +
+          c.yellow('--strict-undetermined: treated as TypeScript 7.0, so conflicts fail the build')
+      );
+    }
   } else if (tsRaw == null && ts.effectiveVersion == null) {
     lines.push(c.dim('  typescript: not a direct dependency'));
   } else if (ts.effectiveTs7) {
-    const label = installed ? `TypeScript ${ts.effectiveVersion} detected` : 'TypeScript 7.0 detected';
+    const label = exact ? `TypeScript ${ts.effectiveVersion} detected` : 'TypeScript 7.0 detected';
     lines.push('  ' + c.red(`typescript ${tsRaw == null ? '(not declared)' : tsRaw} → ${label}`) + srcNote);
   } else {
     const label =
-      installed && ts.effectiveVersion
+      exact && ts.effectiveVersion
         ? `TypeScript ${ts.effectiveVersion} (pre-7.0)`
         : 'TypeScript 6.x (pre-7.0)';
     lines.push('  ' + c.green(`typescript ${tsRaw == null ? '(not declared)' : tsRaw} → ${label}`) + srcNote);
@@ -131,7 +145,11 @@ function humanReport(result, opts = {}) {
 
   if (nothing) {
     lines.push('');
-    lines.push(c.green('  ✓ No TypeScript 7.0 / tsgo readiness issues found.'));
+    lines.push(
+      ts.undetermined
+        ? c.yellow('  ✓ No TypeScript 7.0 / tsgo readiness issues found in what could be checked.')
+        : c.green('  ✓ No TypeScript 7.0 / tsgo readiness issues found.')
+    );
     // Never an empty pass: an unscanned installed tree is a coverage gap, not a
     // clean result.
     if (peerNotRun) {
@@ -365,6 +383,7 @@ function humanReportMany(agg, opts = {}) {
     `  ${s.packagesScanned} scanned · ` +
     `${s.activeConflictPackages} with active conflicts · ` +
     `${s.packagesWithConflicts - s.activeConflictPackages} with warnings · ` +
+    `${s.undeterminedPackages || 0} undetermined · ` +
     `${s.totalPeerFindings || 0} peer finding(s) · ` +
     `${s.totalNotices || 0} notice(s) · ` +
     `${s.totalAdvisories} advisory(ies) · ` +
