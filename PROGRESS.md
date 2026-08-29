@@ -1,6 +1,6 @@
 # PROGRESS — ts7-compat-guard
 
-## Status: v3.2.0 BUILT + VERIFIED 2026-08-29 on branch feat/effective-ts-resolution — awaiting owner review/merge/publish (v3.1.0 is live on npm)
+## Status: v3.2.0 SHIPPED 2026-08-29 (owner-authorized) — npm dist-tag latest, GitHub release v3.2.0, v3 major tag moved to 0b76de1, all CI green on the released commit.
 
 Date: 2026-08-29 (v3.1.0 shipped 2026-08-11; v3.0.0 2026-07-29)
 
@@ -96,10 +96,30 @@ e. CHANGELOG 3.2.0 names the registry fact (latest=7.0.2) and the date. ✓
 - scratch-measure/ is gitignored: v310-src/ snapshot, compare-v32.mjs +
   compare-v32.jsonl, e2e-worked/, pack-test/ all live there.
 
+## Distribution DONE (2026-08-29, owner-authorized)
+- PR #10 squash-merged to main as 0b76de1 after all 12 check-runs were green on
+  the PR head (78406c5), verified via the commit check-runs API.
+- Tag v3.2.0 pushed at 0b76de1 (10/10 check-runs green on that exact commit
+  before tagging). GitHub release published with full notes.
+- `npm publish --access public` -> ts7-compat-guard@3.2.0 is dist-tag latest
+  (verified with npm view). Published BY HAND because the repo has **no
+  NPM_TOKEN secret**, so release.yml's publish step self-skips; the workflow
+  still ran green as release validation and its registry pre-check means there
+  was no double publish.
+- major-tag.yml moved `v3` to 0b76de1 (confirmed against the remote ref), so
+  consumers pinned to @v3 get this release.
+- Published artifact re-verified from the registry in a clean directory:
+  `npm install ts7-compat-guard@3.2.0`, bin reports 3.2.0, and a lockfile-only
+  demo scans to "TypeScript 7.0.2 detected (locked in package-lock.json)",
+  1 conflict, exit 1.
+
 ## Next steps (owner)
-1. Review/merge PR from feat/effective-ts-resolution (measurement table in PR body).
-2. Publish: npm publish + tag v3.2.0 + move v3 tag, after CI green on the
-   exact commit (check-runs API, not gh run watch).
+1. **Add an NPM_TOKEN repo secret** so future releases publish from CI with
+   npm provenance. This one has no provenance attestation because the secret
+   is absent and it went out from a local `npm publish`. Everything else in
+   the release pipeline (tag -> release -> major tag) already works unattended.
+2. Optional announce angle, unused: "your lockfile already knows you are on
+   TypeScript 7, even before npm install."
 
 ## Build/test commands
 - `npm install` · `npm run build` (rebuild dist/ before tagging; CI enforces drift) · `npm test`
