@@ -7,3 +7,6 @@ npm-debug.log*
 test/.tmp-*
 scratch-measure/
 .git-commit-msg.txt
+
+# Local build notes, not for the public repo
+PROGRESS.md
