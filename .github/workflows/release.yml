@@ -1,13 +1,15 @@
 name: Release
 
-# Publishes ts7-compat-guard to npm with provenance when a v* tag is pushed.
+# Publishes ts7-compat-guard to npm when a v* tag is pushed.
 #
-# id-token: write is what makes --provenance work. npm rejects the flag without
-# it, and the permission is never granted by default.
+# Auth is npm Trusted Publishing (OIDC), not a token. The package on npmjs.com
+# names this repo and this workflow filename as its trusted publisher, so the
+# id-token below is the whole credential -- nothing to leak, rotate or lose --
+# and provenance is attached automatically (no --provenance flag needed).
 #
-# Needs an NPM_TOKEN secret (automation token). Without one the build and tests
-# still run as release validation and the publish step skips cleanly, so a tag
-# push never red-Xs just because CI cannot do the interactive 2FA.
+# Trusted publishing needs npm >= 11.5.1, newer than the npm bundled with Node
+# 22, hence the explicit upgrade step. Without it the publish fails with an
+# auth error that reads like a bad token.
 on:
   push:
     tags: ['v*']
@@ -30,6 +32,14 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
           cache: npm
+
+      - name: Meet the trusted-publishing version floor
+        run: |
+          set -euo pipefail
+          npm install -g npm@^11.5.1
+          node --version
+          npm --version
+
       - run: npm ci
       - run: npm run build
       - run: npm test
@@ -41,19 +51,13 @@ jobs:
         with:
           subject-path: 'dist/*'
 
-      - name: Publish to npm with provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm
         run: |
           set -euo pipefail
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "No NPM_TOKEN configured. Build and tests passed; publish by hand." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
           VERSION=$(node -p "require('./package.json').version")
           if npm view "ts7-compat-guard@$VERSION" version >/dev/null 2>&1; then
             echo "ts7-compat-guard@$VERSION is already on the registry, nothing to do." >> "$GITHUB_STEP_SUMMARY"
           else
-            npm publish --provenance --access public
+            npm publish --access public
             echo "Published ts7-compat-guard@$VERSION with provenance." >> "$GITHUB_STEP_SUMMARY"
           fi
