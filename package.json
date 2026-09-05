@@ -64,7 +64,7 @@
     "semver": "^7.6.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.2"
   },
   "repository": {
     "type": "git",
@@ -75,6 +75,6 @@
     "url": "https://github.com/Booyaka101/ts7-compat-guard/issues"
   },
   "allowScripts": {
-    "esbuild@0.28.1": true
+    "esbuild@0.28.2": true
   }
 }
