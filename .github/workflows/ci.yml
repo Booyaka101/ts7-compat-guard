@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [18, 20, 22]
+        node: [18, 20, 22, 24]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -45,8 +45,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
-      - run: npx --yes -p @action-validator/core -p @action-validator/cli action-validator ./action.yml
+          node-version: 24
+      - run: npm ci
+      # The schema check, minus the stale runs.using enum. See
+      # scripts/validate-action.js for why the wrapper exists.
+      - run: npm run validate:action
 
   self-test:
     # Dogfood: run our own action against the repo's package.json.
