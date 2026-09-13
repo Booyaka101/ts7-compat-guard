@@ -526,7 +526,7 @@ carry the same `ts7Ready` / `ts7Status` / `source` / `checkedAt` fields.
 ```bash
 npm install
 npm run build    # bundle src/action.js -> dist/action.js (esbuild; inlines semver + db.json)
-npm test         # 240 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, effective-TS resolution, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
+npm test         # 241 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, effective-TS resolution, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
 ```
 
 The Action runs from the committed self-contained bundle `dist/action.js`, so

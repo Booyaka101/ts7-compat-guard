@@ -44,8 +44,8 @@ no fallback.
   is about to run on 24. A runtime the action declares has to be a tested cell.
 
 ### Added
-- **Runtime assertions in the suite** (`v3.3: action.yml runtime`, 7 checks,
-  233 -> 240). They fail when `runs.using` names a runtime that is gone, or one
+- **Runtime assertions in the suite** (`v3.3: action.yml runtime`, 8 checks,
+  233 -> 241). They fail when `runs.using` names a runtime that is gone, or one
   within 180 days of its removal date. Setting `action.yml` back to `node20`
   turns the suite red today. The next runtime deadline arrives as a failing test
   rather than as a broken workflow.

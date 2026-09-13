@@ -1849,8 +1849,10 @@ section('v3.3: action.yml runtime');
     // Read the open runtimes out of the table rather than naming node24, and do
     // not use `node26` as the unknown: both would fail here the day GitHub
     // moves, which is what the first assertion is for.
-    const open = Object.keys(runtime.RUNTIMES).filter((k) => runtime.RUNTIMES[k].removedOn === null);
-    assert.ok(open.length, 'every known runtime has a removal date; there is nothing left to move to');
+    // Node runtimes only: composite and docker are not interpreters and never
+    // get a removal date, so including them makes the guard below unfailable.
+    const open = Object.keys(runtime.RUNTIMES).filter((k) => /^node/.test(k) && runtime.RUNTIMES[k].removedOn === null);
+    assert.ok(open.length, 'every Node runtime in the table has a removal date; there is nothing left to move to');
     for (const k of open) assert.strictEqual(runtime.checkRuntime(k).ok, true, k);
     assert.strictEqual(runtime.checkRuntime('nodejs-latest').ok, false);
     assert.strictEqual(runtime.checkRuntime(null).ok, false);
@@ -1910,6 +1912,33 @@ runs:
   test('validate:action passes action.yml despite the stale runs.using enum', () => {
     const r = spawnSync(process.execPath, [VALIDATE], { encoding: 'utf8' });
     assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  });
+
+  test('validate:action does not narrow a runtime the schema already accepts', () => {
+    // `using: composite` with `main:` and no `steps:` is genuinely invalid, and
+    // composite is in the 0.6.0 enum. Probing it as node20 makes it validate
+    // clean, so the wrapper used to pass it and blame the runtime enum.
+    const dir = TMP('.tmp-composite');
+    try {
+      const run = (body) => {
+        writeTree(dir, { 'action.yml': body });
+        return spawnSync(process.execPath, [VALIDATE, path.join(dir, 'action.yml')], { encoding: 'utf8' });
+      };
+      const bad = run('name: x\ndescription: y\nruns:\n  using: composite\n  main: dist/index.js\n');
+      assert.strictEqual(bad.status, 1, bad.stdout + bad.stderr);
+
+      // And what it reports is the file's own error, not the oneOf spray the
+      // probe produces by rewriting a valid composite action into a node20 one.
+      const noisy = run([
+        'bogus-top-level: 1', 'name: x', 'description: y', 'runs:', '  using: composite',
+        '  steps:', '    - run: echo hi', '      shell: bash', '',
+      ].join('\n'));
+      assert.strictEqual(noisy.status, 1);
+      assert.ok(/bogus-top-level/.test(noisy.stderr), noisy.stderr);
+      assert.ok(!/one_of/.test(noisy.stderr), 'the probe invented errors from another branch of the runs oneOf');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('validate:action still fails on a schema error that is not the runtime', () => {
