@@ -1822,6 +1822,94 @@ test('action emits ts-version / ts-source / undetermined-count outputs', () => {
   fs.unlinkSync(outFile);
 });
 
+section('v3.3: action.yml runtime');
+// GitHub removes Node 20 from the runners on 2026-09-23. An action.yml still
+// declaring it does not launch that day: the runner cannot find the
+// interpreter, so the step fails before any of this code runs. These assertions
+// are the alarm, and they fire while there is still time to cut a release.
+{
+  const runtime = require('../scripts/action-runtime');
+  const ACTION_YML = path.join(__dirname, '..', 'action.yml');
+  const VALIDATE = path.join(__dirname, '..', 'scripts', 'validate-action.js');
+
+  test('action.yml declares a runtime GitHub still runs', () => {
+    const r = runtime.checkRuntime(runtime.readUsing(ACTION_YML));
+    assert.ok(r.ok, r.reason);
+  });
+
+  test('a removed runtime, and one inside the lead window, are both rejected', () => {
+    assert.strictEqual(runtime.checkRuntime('node16').ok, false);
+    assert.strictEqual(runtime.checkRuntime('node20', new Date('2026-09-24T00:00:00Z')).ok, false);
+    const early = runtime.checkRuntime('node20', new Date('2026-09-01T00:00:00Z'));
+    assert.strictEqual(early.ok, false, 'node20 still launches on 2026-09-01, and we still want to have moved');
+    assert.ok(/2026-09-23/.test(early.reason), early.reason);
+  });
+
+  test('a runtime with no announced removal passes, an unknown one does not', () => {
+    assert.strictEqual(runtime.checkRuntime('node24').ok, true);
+    assert.strictEqual(runtime.checkRuntime('node26').ok, false);
+    assert.strictEqual(runtime.checkRuntime(null).ok, false);
+    assert.ok(runtime.LEAD_DAYS >= 90, 'less than a quarter is not enough warning to ship a release');
+  });
+
+  test('readUsing handles quotes, comments and an absent key', () => {
+    const dir = TMP('.tmp-using');
+    try {
+      const write = (body) => {
+        writeTree(dir, { 'action.yml': body });
+        return path.join(dir, 'action.yml');
+      };
+      assert.strictEqual(runtime.readUsing(write(`runs:
+  using: 'node24'
+  main: x.js
+`)), 'node24');
+      assert.strictEqual(runtime.readUsing(write(`runs:
+  using: node24 # pinned
+  main: x.js
+`)), 'node24');
+      assert.strictEqual(runtime.readUsing(write(`inputs:
+  using:
+    default: node20
+`)), null);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('withRuntime rewrites runs.using and nothing else', () => {
+    const decoy = `inputs:
+  using:
+    default: node20
+runs:
+  using: 'node24'
+  main: dist/index.js
+`;
+    const swapped = runtime.withRuntime(decoy, 'node20');
+    // The decoy input keeps its own default: only the line under `runs:` moves.
+    assert.ok(swapped.includes('    default: node20'));
+    assert.ok(swapped.includes("  using: 'node20'"), 'the original quote style survives');
+    assert.strictEqual(runtime.withRuntime('name: x', 'node20'), 'name: x');
+  });
+
+  test('validate:action passes action.yml despite the stale runs.using enum', () => {
+    const r = spawnSync(process.execPath, [VALIDATE], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  });
+
+  test('validate:action still fails on a schema error that is not the runtime', () => {
+    const dir = TMP('.tmp-badaction');
+    try {
+      const yml = fs.readFileSync(ACTION_YML, 'utf8').replace(/^runs:$/m, 'bogus-top-level: 1\nruns:');
+      writeTree(dir, { 'action.yml': yml });
+      const r = spawnSync(process.execPath, [VALIDATE, path.join(dir, 'action.yml')], { encoding: 'utf8' });
+      assert.strictEqual(r.status, 1, 'a real schema error must still fail the build');
+      assert.ok(/bogus-top-level/.test(r.stderr), r.stderr);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
 // -------------------- summary --------------------
 Promise.all(pending).then(() => {
   process.stdout.write(`\n${passed} passed, ${failed} failed\n`);

@@ -87,5 +87,5 @@ outputs:
   json:
     description: Full JSON report as a string.
 runs:
-  using: node20
+  using: node24
   main: dist/action.js

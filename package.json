@@ -1,6 +1,6 @@
 {
   "name": "ts7-compat-guard",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "TypeScript 7.0 / tsgo readiness scanner with a dated readiness ledger — flags Compiler-API dependencies (until their release train actually supports TS7), scans the installed node_modules tree for bounded typescript peer ranges that exclude 7.x (catches transitive deps), detects the @typescript/typescript6 API shim in both documented layouts, removed tsconfig.json options (with exact line numbers), and behavioural advisories. Manifest/config only, no source-file scanning, no false positives. npx CLI + GitHub Action + SARIF.",
   "bin": {
     "ts7-compat-guard": "src/cli.js"
@@ -28,7 +28,8 @@
     "build:check": "npm run build && git diff --exit-code -- dist/ || (echo 'dist/ is out of date — commit the rebuilt bundle' && exit 1)",
     "test": "node test/run.js",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "validate:action": "node scripts/validate-action.js"
   },
   "keywords": [
     "typescript",
@@ -64,6 +65,7 @@
     "semver": "^7.6.0"
   },
   "devDependencies": {
+    "@action-validator/cli": "^0.6.0",
     "esbuild": "^0.28.2"
   },
   "repository": {

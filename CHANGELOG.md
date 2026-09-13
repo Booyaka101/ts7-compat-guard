@@ -4,6 +4,56 @@ All notable changes to `ts7-compat-guard` are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [3.3.0] - 2026-09-13
+
+A runtime change with no behaviour change. GitHub removes Node 20 from the
+Actions runners on **2026-09-23**, and the
+`ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION` opt-out expires the same day. An
+`action.yml` still declaring `node20` does not launch after that: the runner
+cannot find the interpreter, so a consumer's
+`- uses: Booyaka101/ts7-compat-guard@v3` step fails before the guard runs, with
+no fallback.
+
+### Changed
+- **`action.yml` declares `runs.using: node24`.** `dist/action.js` is unchanged.
+  The bundle was driven end to end against the `peer-worked` fixture under both
+  Node 20.20.2 and Node 24.21.0: stdout, the SARIF file, the job summary and all
+  twelve step outputs hash identically under each. The full suite passes on both.
+  Runners have defaulted to Node 24 since 2026-06-16, so this is a declaration
+  catching up with the runner.
+
+- **`validate:action` keeps `@action-validator/cli` but stops it vetoing the
+  runtime.** `@action-validator/core` last published 0.6.0 on **2024-02-23** and
+  compiles its schema into a wasm blob, so the `runs.using` enum it carries is
+  `node12` / `node16` / `node20`, and there is no newer copy to point it at. A
+  2024 schema was deciding which 2026 runtime we ship.
+
+  Deleting the check was the wrong fix and hand-patching a schema out of a wasm
+  blob is not a thing to maintain. `scripts/validate-action.js` runs the
+  validator as before; if it fails, it re-validates the same file with `using`
+  swapped for one the schema accepts. If that clears every error, the runtime
+  string was the only objection and the file passes. Any other error, at any
+  path, still fails, which a test proves by planting an unrelated schema
+  violation and asserting a non-zero exit.
+
+  The CI job that ran `npx action-validator` inline now runs this script, and
+  `@action-validator/cli` became a devDependency so the check is reproducible
+  locally instead of re-downloaded every run.
+
+- **CI tests Node 24.** The matrix was `[18, 20, 22]` while the action itself
+  is about to run on 24. A runtime the action declares has to be a tested cell.
+
+### Added
+- **Runtime assertions in the suite** (`v3.3: action.yml runtime`, 7 checks,
+  233 -> 240). They fail when `runs.using` names a runtime that is gone, or one
+  within 180 days of its removal date. Setting `action.yml` back to `node20`
+  turns the suite red today. The next runtime deadline arrives as a failing test
+  rather than as a broken workflow.
+
+- **README: runner requirements.** Node 24 needs macOS >= 13.5, and Node.js
+  publishes no `linux-armv7l` build for 24, so ARM32 self-hosted runners cannot
+  run this action. Both are stated rather than glossed.
+
 ## [3.2.0] - 2026-08-29
 
 The guard now resolves the **effective** TypeScript version instead of trusting

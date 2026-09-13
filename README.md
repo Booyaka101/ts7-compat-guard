@@ -403,6 +403,25 @@ Conflicts surface as GitHub **error annotations** — tsconfig ones point at the
 `tsconfig.json` line — with warnings when you're still on TS 6 and non-failing notices
 for advisories, plus a job-summary line.
 
+### Runner requirements
+
+`action.yml` declares `runs.using: node24`. GitHub removes Node 20 from the
+Actions runners on **2026-09-23**, and an action still declaring `node20` does
+not launch after that: the runner cannot find the interpreter, so the step fails
+before any of the guard runs. Runners have defaulted to Node 24 since
+2026-06-16, so this changes the declaration and nothing else.
+
+Two runner setups cannot run Node 24:
+
+- **macOS 13.4 and older**, including a `macos-13` runner not patched past 13.4.
+  Node 24 requires macOS >= 13.5. `macos-14` and later are fine.
+- **ARM32 self-hosted runners** (`linux/arm`, armv7l). Node.js publishes no
+  `linux-armv7l` build for 24 at all, and armv7 was downgraded to Experimental
+  in Node 24. ARM64 is unaffected.
+
+On either of those, `ts7-compat-guard@v3.2.0` still declares `node20`, but only
+until 2026-09-23. After that it stops launching anywhere.
+
 ## How detection works
 
 1. Resolve the **effective** `typescript` version, preferring facts over intent
@@ -507,11 +526,19 @@ carry the same `ts7Ready` / `ts7Status` / `source` / `checkedAt` fields.
 ```bash
 npm install
 npm run build    # bundle src/action.js -> dist/action.js (esbuild; inlines semver + db.json)
-npm test         # 233 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, effective-TS resolution, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
+npm test         # 240 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, effective-TS resolution, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
 ```
 
 The Action runs from the committed self-contained bundle `dist/action.js`, so
 **re-run `npm run build` and commit `dist/` before tagging a release** (CI enforces this).
+
+`npm run validate:action` runs `@action-validator/cli` over `action.yml`, but
+does not let it veto the runtime. That package last published 0.6.0 on
+2024-02-23 and compiles its schema into a wasm blob, so its `runs.using` enum
+stops at `node20` and cannot be pointed at a newer copy. The wrapper in
+`scripts/validate-action.js` re-validates the file with the runtime swapped for
+one the schema accepts: if that clears every error, the runtime string was the
+only objection. Any other error still fails.
 
 ## License
 
