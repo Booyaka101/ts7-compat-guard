@@ -4357,7 +4357,7 @@ function writeSarif(results, root, version, file) {
   }
 }
 function safeVersion() {
-  if (true) return "3.2.0";
+  if (true) return "3.3.0";
   try {
     const fs2 = require("node:fs");
     const path2 = require("node:path");
