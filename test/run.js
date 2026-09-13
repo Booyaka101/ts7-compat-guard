@@ -1846,9 +1846,15 @@ section('v3.3: action.yml runtime');
   });
 
   test('a runtime with no announced removal passes, an unknown one does not', () => {
-    assert.strictEqual(runtime.checkRuntime('node24').ok, true);
-    assert.strictEqual(runtime.checkRuntime('node26').ok, false);
+    // Read the open runtimes out of the table rather than naming node24, and do
+    // not use `node26` as the unknown: both would fail here the day GitHub
+    // moves, which is what the first assertion is for.
+    const open = Object.keys(runtime.RUNTIMES).filter((k) => runtime.RUNTIMES[k].removedOn === null);
+    assert.ok(open.length, 'every known runtime has a removal date; there is nothing left to move to');
+    for (const k of open) assert.strictEqual(runtime.checkRuntime(k).ok, true, k);
+    assert.strictEqual(runtime.checkRuntime('nodejs-latest').ok, false);
     assert.strictEqual(runtime.checkRuntime(null).ok, false);
+    assert.strictEqual(runtime.checkRuntime('').ok, false);
     assert.ok(runtime.LEAD_DAYS >= 90, 'less than a quarter is not enough warning to ship a release');
   });
 
@@ -1865,6 +1871,15 @@ section('v3.3: action.yml runtime');
 `)), 'node24');
       assert.strictEqual(runtime.readUsing(write(`runs:
   using: node24 # pinned
+  main: x.js
+`)), 'node24');
+      // A comment or blank line at column 0 belongs to no block, so it must not
+      // end `runs:`. action-validator accepts such a file, and we used to read
+      // it as declaring no runtime at all and hard-fail on a valid action.
+      assert.strictEqual(runtime.readUsing(write(`runs:
+# note
+
+  using: node24
   main: x.js
 `)), 'node24');
       assert.strictEqual(runtime.readUsing(write(`inputs:
@@ -1889,6 +1904,7 @@ runs:
     assert.ok(swapped.includes('    default: node20'));
     assert.ok(swapped.includes("  using: 'node20'"), 'the original quote style survives');
     assert.strictEqual(runtime.withRuntime('name: x', 'node20'), 'name: x');
+    assert.strictEqual(runtime.withRuntime('runs:\n# note\n  using: node24\n', 'node20'), 'runs:\n# note\n  using: node20\n');
   });
 
   test('validate:action passes action.yml despite the stale runs.using enum', () => {

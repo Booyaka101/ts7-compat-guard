@@ -24,6 +24,11 @@ const SCHEMA_KNOWN_RUNTIME = 'node20';
 
 const target = path.resolve(process.argv[2] || 'action.yml');
 
+if (!fs.existsSync(target)) {
+  console.error(`validate-action: no such file: ${target}`);
+  process.exit(1);
+}
+
 function validate(file) {
   // action-validator picks action-vs-workflow from the FILENAME, so a copy has
   // to keep the name `action.yml` or it is checked against the workflow schema.
@@ -64,5 +69,7 @@ if (swapped.ok) {
 }
 
 console.error(`validate-action: ${path.basename(target)} failed validation.\n`);
-console.error(direct.output.trim());
+// The probe's errors, not the direct run's: the direct run still leads with
+// the stale runs.using complaint, which is the noise this wrapper drops.
+console.error(swapped.output.trim());
 process.exit(1);
