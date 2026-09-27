@@ -48,7 +48,7 @@ Sources: [Announcing TypeScript 7.0 (Microsoft devblog)](https://devblogs.micros
 | **Compiler-API dependencies** — 25 packages that embed the removed programmatic API | `package.json` + installed versions | `conflict` on TS7 · `warning` on TS6/shim/partial · `notice` when the installed version satisfies `ts7Ready` |
 | **Installed-tree peer scan** (v3.1) — every installed package whose **bounded** `peerDependencies.typescript` range excludes the target TS (default 7.0.2). Catches **transitive** deps and packages the ledger has never heard of | `node_modules/**/package.json` (scoped, nested, pnpm `.pnpm` store) | `warning` (never fails) · `conflict` with `--strict-peers` |
 | **TS6 API shim** — `@typescript/typescript6`, both documented layouts | `package.json` | advisory line; downgrades Compiler-API conflicts to `warning` |
-| **Removed tsconfig options** — 17 options + `references.prepend`, with exact line numbers | `tsconfig.json` | `conflict` on TS7 · `warning` on TS6 (never downgraded by the shim) |
+| **Removed tsconfig options** — 20 options + `references.prepend`, with exact line numbers | `tsconfig.json` | `conflict` on TS7 · `warning` on TS6, except options TS 5.5 already removed, which are `conflict` there too (never downgraded by the shim) |
 | **Behavioural advisories** — `strict` default, `emitDecoratorMetadata`, `ignoreDeprecations` | `tsconfig.json` (+ dep context) | `advisory` (never fails) |
 
 Only `conflict`-severity findings (something that *will* break under TS7) fail a
@@ -122,11 +122,12 @@ correctly and exits 0:
 ```
 
 And a repo whose tooling has already caught up (a db entry with `ts7Ready`
-satisfied by the installed version) gets a notice, not a conflict:
+satisfied by the installed version) gets a notice, not a conflict. No entry
+has a `ts7Ready` range yet, so this one is hypothetical:
 
 ```
   [dependencies]
-  NOTICE: typescript-eslint 8.70.0 — TS7 supported since 8.70.0 (source: https://github.com/typescript-eslint/typescript-eslint/releases, checked 2026-07-29)
+  NOTICE: typescript-eslint 9.0.0 — TS7 supported since 9.0.0 (source: https://github.com/typescript-eslint/typescript-eslint/releases, checked 2026-09-27)
 
   1 notice(s) — all flagged dependencies have TypeScript 7 support.
 ```
@@ -223,7 +224,7 @@ it cannot prove:
 | Code | When |
 |------|------|
 | `0` | No build-breaking conflicts (or `--mode warn`). Warnings, notices, advisories & installed-tree peer findings (without `--strict-peers`) do **not** fail. |
-| `1` | A Compiler-API dependency (not TS7-ready, no shim) **or** a removed tsconfig option, while on TypeScript 7.0, **or** an installed-tree peer finding under `--strict-peers`, **or** an undetermined version under `--strict-undetermined` (`--mode fail`) |
+| `1` | A Compiler-API dependency (not TS7-ready, no shim) **or** a removed tsconfig option, while on TypeScript 7.0, **or** an option TypeScript 5.5 already removed, on 5.5 or later, **or** an installed-tree peer finding under `--strict-peers`, **or** an undetermined version under `--strict-undetermined` (`--mode fail`) |
 | `2` | Usage / runtime error (e.g. no `package.json`, invalid `--target-ts`) |
 
 > **Breaking change in v3:** a repo whose flagged dependencies satisfy their
@@ -352,9 +353,21 @@ Removed options detected (each reported with its exact line, `conflict` on TS7 /
 
 `target: es5`/`es3` · `downlevelIteration` · `module: amd`/`umd`/`system`/`none` ·
 `moduleResolution: node`/`node10`/`classic` · `baseUrl` · `esModuleInterop: false` ·
-`allowSyntheticDefaultImports: false` · `alwaysStrict: false` · `out` ·
+`allowSyntheticDefaultImports: false` · `alwaysStrict: false` · `outFile` · `out` ·
 `importsNotUsedAsValues` · `preserveValueImports` · `keyofStringsOnly` ·
-`noImplicitUseStrict` · `noStrictGenericChecks` · `charset` · `references[].prepend`
+`noImplicitUseStrict` · `noStrictGenericChecks` · `charset` ·
+`suppressExcessPropertyErrors` · `suppressImplicitAnyIndexErrors` · `references[].prepend`
+
+`target: es3` and everything from `out` onwards were already removed in
+TypeScript 5.5, so TypeScript 6 rejects them too and they are `conflict` there,
+not `warning`. The exceptions are the flags set to `false` (or
+`importsNotUsedAsValues: "remove"`), which 6.x still accepts. `prepend` goes the
+other way: 5.5 through 6.x reject it, but 7.0 accepts the key and ignores it, so
+on 7.0 it is a `warning` about dead config.
+
+`scripts/tsc-probe.js` (`npm run probe:tsc`) writes a sample of every rule into
+a throwaway project and compiles it with the real TypeScript 6 and 7, failing if
+the guard's severity ever disagrees with what `tsc` does.
 
 JSONC (comments + trailing commas) is parsed correctly, and relative `extends`
 chains are followed so inherited options are still caught.
@@ -486,14 +499,15 @@ down and never throw.
 
 25 packages, each entry carrying `reason`, `fix`, `ts7Status`
 (`none` | `partial` | `supported`), an optional `ts7Ready` range, a `source` URL
-and a `checkedAt` date. **As of 2026-07-29 not one of them ships a bounded
+and a `checkedAt` date. **As of 2026-09-27 not one of them ships a bounded
 typescript peer range that admits 7.x** (typescript-eslint 8.65.0 added a
-"TS 7 detected" *warning* while staying pinned `>=4.8.4 <6.1.0`), so every entry
+"TS 7 detected" *warning* while staying pinned `>=4.8.4 <6.1.0`, still true of
+8.70.1), and `typescript@7.0.2` still exports no Compiler API, so every entry
 truthfully reads `ts7Status: "none"` — no invented version numbers. When the
 ecosystem catches up, `db --check` proposes the exact release, and repos on that
 release start seeing green notices instead of conflicts.
 
-| Package | TS7 status (checked 2026-07-29) |
+| Package | TS7 status (checked 2026-09-27) |
 |---------|--------------------------------|
 | `@vue/language-tools`, `volar`, `@volar/typescript`, `vue-tsc` | none |
 | `@astrojs/language-server`, `@astrojs/check` | none |
@@ -526,7 +540,8 @@ carry the same `ts7Ready` / `ts7Status` / `source` / `checkedAt` fields.
 ```bash
 npm install
 npm run build    # bundle src/action.js -> dist/action.js (esbuild; inlines semver + db.json)
-npm test         # 241 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, effective-TS resolution, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
+npm test         # 248 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, effective-TS resolution, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
+npm run probe:tsc # every removed-option rule against real TypeScript 6 and 7 (installs both)
 ```
 
 The Action runs from the committed self-contained bundle `dist/action.js`, so

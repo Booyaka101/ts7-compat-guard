@@ -2006,182 +2006,182 @@ var require_semver2 = __commonJS({
 var require_db = __commonJS({
   "src/db.json"(exports2, module2) {
     module2.exports = {
-      generatedAt: "2026-07-29",
+      generatedAt: "2026-09-27",
       packages: {
         "@vue/language-tools": {
           reason: "Uses TypeScript Compiler API programmatic layer, absent in TypeScript 7.0 until 7.1",
           fix: "Pin typescript to ^6.x, or install @typescript/typescript6 and configure alias",
           ts7Status: "none",
           source: "https://github.com/vuejs/language-tools/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         volar: {
           reason: "Same as @vue/language-tools (predecessor package)",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://www.npmjs.com/package/volar",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "@volar/typescript": {
           reason: "Uses TypeScript Compiler API",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/volarjs/volar.js/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "@astrojs/language-server": {
           reason: "Uses TypeScript Compiler API for Astro template type-checking",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/withastro/language-tools/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "svelte-language-server": {
           reason: "Uses TypeScript Compiler API for Svelte template type-checking",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/sveltejs/language-tools/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "@angular/compiler-cli": {
           reason: "Uses TypeScript Compiler API for Angular template type-checking",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/angular/angular/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "ts-node": {
           reason: "Wraps TypeScript Compiler API for runtime transpilation",
           fix: "Use tsx or swc-node as replacements, or pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/TypeStrong/ts-node/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "ts-morph": {
           reason: "Built entirely on the TypeScript Compiler API",
           fix: "Wait for ts-morph TypeScript 7.1 support or pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/dsherret/ts-morph/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "@mdx-js/mdx": {
           reason: "MDX type-checking embeds the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/mdx-js/mdx/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "typescript-eslint": {
-          reason: "typescript-eslint reads types via the TypeScript Compiler API, which TypeScript 7.0 does not export until 7.1. v8.65.0 (2026-07-20) added a warning when TS 7 is detected, but its typescript peer range is still >=4.8.4 <6.1.0",
+          reason: "typescript-eslint reads types via the TypeScript Compiler API, which TypeScript 7.0 does not export until 7.1. v8.65.0 (2026-07-20) added a warning when TS 7 is detected, but its typescript peer range is still >=4.8.4 <6.1.0 (8.70.1 included)",
           fix: "Run typescript-eslint against @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/typescript-eslint/typescript-eslint/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "@typescript-eslint/typescript-estree": {
           reason: "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
           fix: "Install @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/typescript-eslint/typescript-eslint/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "vue-tsc": {
           reason: "Wraps the TypeScript Compiler API (via Volar) to type-check Vue SFC templates",
           fix: "Pin typescript to ^6.x, or install @typescript/typescript6 and run tsc6",
           ts7Status: "none",
           source: "https://github.com/vuejs/language-tools/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "svelte-check": {
           reason: "Uses the TypeScript Compiler API (via svelte-language-server) to type-check Svelte templates",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/sveltejs/language-tools/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "@astrojs/check": {
           reason: "Astro's type-check CLI drives the TypeScript Compiler API (via @astrojs/language-server)",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/withastro/language-tools/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "@typescript-eslint/parser": {
           reason: "Parses and type-resolves via the TypeScript Compiler API, absent in TypeScript 7.0 until 7.1",
           fix: "Run against @typescript/typescript6 side-by-side, or pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/typescript-eslint/typescript-eslint/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "ts-loader": {
           reason: "webpack loader that calls the TypeScript Compiler API (createProgram / transpileModule) to compile and type-check",
           fix: "Switch to esbuild-loader or swc-loader, or pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/TypeStrong/ts-loader/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "fork-ts-checker-webpack-plugin": {
           reason: "Runs a full TypeScript type-check via the Compiler API in a worker process",
           fix: "Pin typescript to ^6.x until the plugin targets the TypeScript 7.1 API",
           ts7Status: "none",
           source: "https://github.com/TypeStrong/fork-ts-checker-webpack-plugin/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "rollup-plugin-typescript2": {
           reason: "Rollup plugin built on the TypeScript Compiler API (language service) for compile + type-check",
           fix: "Use @rollup/plugin-typescript in transpile-only mode with esbuild/swc, or pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/ezolenko/rollup-plugin-typescript2/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "@rollup/plugin-typescript": {
           reason: "Invokes the TypeScript Compiler API to emit and type-check during Rollup builds",
           fix: "Switch emit to esbuild/swc and type-check separately, or pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/rollup/plugins/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "ts-jest": {
           reason: "Compiles and type-checks test files through the TypeScript Compiler API",
           fix: "Use @swc/jest or babel-jest for transform, or pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/kulshekhar/ts-jest/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "@microsoft/api-extractor": {
           reason: "Analyzes .d.ts rollups via the TypeScript Compiler API",
           fix: "Pin typescript to ^6.x until api-extractor supports the TypeScript 7.1 API",
           ts7Status: "none",
           source: "https://github.com/microsoft/rushstack/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         typedoc: {
           reason: "Reads program symbols and types via the TypeScript Compiler API to generate docs",
           fix: "Pin typescript to ^6.x until TypeDoc supports the TypeScript 7.1 API",
           ts7Status: "none",
           source: "https://github.com/TypeStrong/typedoc/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         "dts-bundle-generator": {
           reason: "Builds bundled type declarations via the TypeScript Compiler API",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/timocov/dts-bundle-generator/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         tsd: {
           reason: "Runs type assertions by driving the TypeScript Compiler API",
           fix: "Pin typescript to ^6.x",
           ts7Status: "none",
           source: "https://github.com/tsdjs/tsd/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         },
         tsup: {
           reason: 'Generates .d.ts through the TypeScript Compiler API; its declaration step crashes on 7.0 with "Cannot read properties of undefined (reading useCaseSensitiveFileNames)"',
           fix: "Build with `--dts false` and emit declarations via tsc, or pin typescript to ^6.x until tsup supports the native compiler",
           ts7Status: "none",
           source: "https://github.com/egoist/tsup/releases",
-          checkedAt: "2026-07-29"
+          checkedAt: "2026-09-27"
         }
       }
     };
@@ -2194,8 +2194,10 @@ var require_tsconfig = __commonJS({
     "use strict";
     var fs2 = require("node:fs");
     var path2 = require("node:path");
+    var semver = require_semver2();
     var HELP_URI = "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/";
     var DECORATORS_URI = "https://github.com/microsoft/typescript-go/discussions/741";
+    var sinceFiveFive = (v) => v && String(v).toLowerCase() !== "remove" ? "5.5" : "7.0";
     var REMOVED_OPTIONS = [
       {
         id: "target-es5",
@@ -2204,16 +2206,17 @@ var require_tsconfig = __commonJS({
           const v = typeof o.target === "string" ? o.target.toLowerCase() : null;
           return v === "es5" || v === "es3" ? o.target : null;
         },
+        removedIn: (v) => String(v).toLowerCase() === "es3" ? "5.5" : "7.0",
         title: 'target "ES5"/"ES3" removed',
-        reason: 'TypeScript 7.0 drops down-level emit below ES2015; `target: "es5"`/`"es3"` is no longer supported (minimum output is modern ES).',
+        reason: 'TypeScript 7.0 drops down-level emit below ES2015; `target: "es5"` is no longer supported (`"es3"` already went in 5.5).',
         fix: "Raise `target` to `es2015` or later (e.g. `es2022`). Down-level to ES5 with a separate tool (esbuild/swc/Babel) if you still need it."
       },
       {
         id: "downlevel-iteration",
         key: "downlevelIteration",
-        test: (o) => o.downlevelIteration ? true : null,
+        test: (o) => o.downlevelIteration != null ? o.downlevelIteration : null,
         title: "downlevelIteration removed",
-        reason: "`downlevelIteration` only applied to pre-ES2015 targets, which TypeScript 7.0 no longer supports, so the option is removed.",
+        reason: "`downlevelIteration` only applied to pre-ES2015 targets, which TypeScript 7.0 no longer supports, so the option is removed. Setting it to `false` is rejected too.",
         fix: "Remove `downlevelIteration` and target `es2015`+ (native iteration)."
       },
       {
@@ -2274,57 +2277,90 @@ var require_tsconfig = __commonJS({
         id: "out",
         key: "out",
         test: (o) => o.out != null ? o.out : null,
-        title: "out removed (use outFile)",
-        reason: "The legacy `out` option (superseded by `outFile` years ago) is removed in TypeScript 7.0.",
-        fix: "Replace `out` with `outFile`, or emit with a bundler."
+        removedIn: sinceFiveFive,
+        title: "out removed",
+        reason: "The legacy `out` option was removed in TypeScript 5.5. Its successor `outFile` is itself removed in 7.0.",
+        fix: "Remove `out` and produce a single-file bundle with a bundler."
+      },
+      {
+        id: "out-file",
+        key: "outFile",
+        test: (o) => o.outFile != null ? o.outFile : null,
+        title: "outFile removed",
+        reason: "`outFile` (concatenating the program into one script) is removed in TypeScript 7.0.",
+        fix: "Remove `outFile` and produce a single-file bundle with a bundler."
       },
       {
         id: "imports-not-used-as-values",
         key: "importsNotUsedAsValues",
         test: (o) => o.importsNotUsedAsValues != null ? o.importsNotUsedAsValues : null,
+        removedIn: sinceFiveFive,
         title: "importsNotUsedAsValues removed",
-        reason: "`importsNotUsedAsValues` was deprecated in favour of `verbatimModuleSyntax` and is removed in TypeScript 7.0.",
+        reason: "`importsNotUsedAsValues` was deprecated in favour of `verbatimModuleSyntax` and was removed in TypeScript 5.5.",
         fix: 'Remove it and set `"verbatimModuleSyntax": true` if you need explicit type-only import elision.'
       },
       {
         id: "preserve-value-imports",
         key: "preserveValueImports",
         test: (o) => o.preserveValueImports != null ? o.preserveValueImports : null,
+        removedIn: sinceFiveFive,
         title: "preserveValueImports removed",
-        reason: "`preserveValueImports` was folded into `verbatimModuleSyntax` and is removed in TypeScript 7.0.",
+        reason: "`preserveValueImports` was folded into `verbatimModuleSyntax` and removed in TypeScript 5.5.",
         fix: 'Remove it and use `"verbatimModuleSyntax": true`.'
       },
       {
         id: "keyof-strings-only",
         key: "keyofStringsOnly",
         test: (o) => o.keyofStringsOnly != null ? o.keyofStringsOnly : null,
+        removedIn: sinceFiveFive,
         title: "keyofStringsOnly removed",
-        reason: "`keyofStringsOnly` (a legacy TypeScript 2.9 flag) is removed in TypeScript 7.0.",
+        reason: "`keyofStringsOnly` (a legacy TypeScript 2.9 flag) was removed in TypeScript 5.5.",
         fix: "Remove `keyofStringsOnly`."
       },
       {
         id: "no-implicit-use-strict",
         key: "noImplicitUseStrict",
         test: (o) => o.noImplicitUseStrict != null ? o.noImplicitUseStrict : null,
+        removedIn: sinceFiveFive,
         title: "noImplicitUseStrict removed",
-        reason: "`noImplicitUseStrict` is removed in TypeScript 7.0.",
+        reason: "`noImplicitUseStrict` was removed in TypeScript 5.5.",
         fix: "Remove `noImplicitUseStrict`."
       },
       {
         id: "no-strict-generic-checks",
         key: "noStrictGenericChecks",
         test: (o) => o.noStrictGenericChecks != null ? o.noStrictGenericChecks : null,
+        removedIn: sinceFiveFive,
         title: "noStrictGenericChecks removed",
-        reason: "`noStrictGenericChecks` is removed in TypeScript 7.0.",
+        reason: "`noStrictGenericChecks` was removed in TypeScript 5.5.",
         fix: "Remove `noStrictGenericChecks` and fix any generic variance errors it was masking."
       },
       {
         id: "charset",
         key: "charset",
         test: (o) => o.charset != null ? o.charset : null,
+        removedIn: sinceFiveFive,
         title: "charset removed",
-        reason: "`charset` has been a no-op since TypeScript 1.8 and is removed in TypeScript 7.0.",
+        reason: "`charset` had been a no-op since TypeScript 1.8 and was removed in TypeScript 5.5.",
         fix: "Remove `charset` (source files are read as UTF-8)."
+      },
+      {
+        id: "suppress-excess-property-errors",
+        key: "suppressExcessPropertyErrors",
+        test: (o) => o.suppressExcessPropertyErrors != null ? o.suppressExcessPropertyErrors : null,
+        removedIn: sinceFiveFive,
+        title: "suppressExcessPropertyErrors removed",
+        reason: "`suppressExcessPropertyErrors` was removed in TypeScript 5.5.",
+        fix: "Remove it and fix the excess-property errors it was hiding."
+      },
+      {
+        id: "suppress-implicit-any-index-errors",
+        key: "suppressImplicitAnyIndexErrors",
+        test: (o) => o.suppressImplicitAnyIndexErrors != null ? o.suppressImplicitAnyIndexErrors : null,
+        removedIn: sinceFiveFive,
+        title: "suppressImplicitAnyIndexErrors removed",
+        reason: "`suppressImplicitAnyIndexErrors` was removed in TypeScript 5.5.",
+        fix: "Remove it and type the index accesses it was hiding (an index signature, or `Record<string, T>`)."
       }
     ];
     var ADVISORY_RULES = [
@@ -2552,6 +2588,8 @@ var require_tsconfig = __commonJS({
     }
     function evaluateTsconfig(parsed, ctx = {}) {
       const ts7 = !!ctx.ts7;
+      const tsVersion = ctx.tsVersion ? semver.coerce(ctx.tsVersion) : null;
+      const rejectedBy = (since) => ts7 || !!tsVersion && semver.gte(tsVersion, `${since}.0`);
       const options = parsed.options || {};
       const optionsSet = new Set(Object.keys(options));
       const findings = [];
@@ -2562,6 +2600,7 @@ var require_tsconfig = __commonJS({
         const hit = rule.test(options);
         if (hit === null || hit === void 0) continue;
         const loc = locateKey(raw, rule.key);
+        const since = typeof rule.removedIn === "function" ? rule.removedIn(hit) : rule.removedIn || "7.0";
         findings.push({
           category: "tsconfig",
           id: rule.id,
@@ -2570,7 +2609,7 @@ var require_tsconfig = __commonJS({
           title: rule.title,
           reason: rule.reason,
           fix: rule.fix,
-          severity: ts7 ? "conflict" : "warning",
+          severity: rejectedBy(since) ? "conflict" : "warning",
           file: rel,
           line: loc.line,
           column: loc.column,
@@ -2585,9 +2624,9 @@ var require_tsconfig = __commonJS({
           option: "references[].prepend",
           value: true,
           title: "project-reference prepend removed",
-          reason: "`prepend` on project references (concatenated `outFile` output) is removed in TypeScript 7.0.",
+          reason: ts7 ? "`prepend` on project references was removed in TypeScript 5.5. TypeScript 7.0 no longer rejects the key but ignores it, and `outFile`, which it concatenated into, is gone." : "`prepend` on project references (concatenated `outFile` output) was removed in TypeScript 5.5.",
           fix: "Drop `prepend` and concatenate build output with a bundler if needed.",
-          severity: ts7 ? "conflict" : "warning",
+          severity: !ts7 && rejectedBy("5.5") ? "conflict" : "warning",
           file: rel,
           line: loc.line,
           column: loc.column,
@@ -3317,7 +3356,12 @@ var require_core = __commonJS({
       result.dir = dir;
       if (opts.tsconfig !== false) {
         const deps = mergeDeps(pkg);
-        const ts = tsconfig.analyzeTsconfigDir(dir, { ts7: result.ts7, deps, root: dir });
+        const ts = tsconfig.analyzeTsconfigDir(dir, {
+          ts7: result.ts7,
+          tsVersion: result.typescript.effectiveVersion,
+          deps,
+          root: dir
+        });
         result.tsconfig = {
           present: ts.present,
           path: ts.path,
@@ -4357,7 +4401,7 @@ function writeSarif(results, root, version, file) {
   }
 }
 function safeVersion() {
-  if (true) return "3.3.0";
+  if (true) return "3.4.0";
   try {
     const fs2 = require("node:fs");
     const path2 = require("node:path");

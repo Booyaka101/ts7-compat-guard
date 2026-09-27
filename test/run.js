@@ -570,6 +570,59 @@ test('references[].prepend detected', () => {
   assert.ok(ev.findings.some((f) => f.id === 'references-prepend'));
 });
 
+section('tsconfig: removal versions (scripts/tsc-probe.js holds these against tsc)');
+const evalTs = (options, ctx, references = []) =>
+  tsc.evaluateTsconfig({ options, raw: '', references }, Object.assign({ deps: {} }, ctx)).findings;
+const sev = (findings, id) => (findings.find((f) => f.id === id) || {}).severity;
+test('options removed in 5.5 are conflicts on 6.x; 7.0 removals stay warnings', () => {
+  const f = evalTs({ charset: 'utf8', keyofStringsOnly: true, out: 'b.js', baseUrl: '.' }, { ts7: false, tsVersion: '6.0.3' });
+  assert.strictEqual(sev(f, 'charset'), 'conflict');
+  assert.strictEqual(sev(f, 'keyof-strings-only'), 'conflict');
+  assert.strictEqual(sev(f, 'out'), 'conflict');
+  assert.strictEqual(sev(f, 'base-url'), 'warning');
+});
+test('target es3 is a 6.x conflict, es5 a 6.x warning', () => {
+  assert.strictEqual(sev(evalTs({ target: 'ES3' }, { tsVersion: '6.0.3' }), 'target-es5'), 'conflict');
+  assert.strictEqual(sev(evalTs({ target: 'es5' }, { tsVersion: '6.0.3' }), 'target-es5'), 'warning');
+});
+test('5.5 removals switched off only break on 7.0', () => {
+  const f = evalTs({ keyofStringsOnly: false, importsNotUsedAsValues: 'remove' }, { tsVersion: '6.0.3' });
+  assert.strictEqual(sev(f, 'keyof-strings-only'), 'warning');
+  assert.strictEqual(sev(f, 'imports-not-used-as-values'), 'warning');
+  assert.strictEqual(sev(evalTs({ keyofStringsOnly: false }, { ts7: true }), 'keyof-strings-only'), 'conflict');
+});
+test('below 5.5, or with no known version, 5.5 removals stay warnings', () => {
+  assert.strictEqual(sev(evalTs({ charset: 'utf8' }, { tsVersion: '5.4.5' }), 'charset'), 'warning');
+  assert.strictEqual(sev(evalTs({ charset: 'utf8' }, {}), 'charset'), 'warning');
+});
+test('outFile, suppress*Errors and downlevelIteration:false are detected', () => {
+  const f = evalTs(
+    { outFile: 'b.js', suppressExcessPropertyErrors: false, suppressImplicitAnyIndexErrors: true, downlevelIteration: false },
+    { ts7: true }
+  );
+  assert.deepStrictEqual(f.map((x) => x.id).sort(), [
+    'downlevel-iteration',
+    'out-file',
+    'suppress-excess-property-errors',
+    'suppress-implicit-any-index-errors',
+  ]);
+  assert.ok(f.every((x) => x.severity === 'conflict'));
+});
+test('prepend: conflict on 6.x, warning on 7.0 (which ignores it)', () => {
+  const refs = [{ path: '../x', prepend: true }];
+  assert.strictEqual(sev(evalTs({}, { tsVersion: '6.0.3' }, refs), 'references-prepend'), 'conflict');
+  const on7 = evalTs({}, { ts7: true, tsVersion: '7.0.2' }, refs).find((f) => f.id === 'references-prepend');
+  assert.strictEqual(on7.severity, 'warning');
+  assert.ok(/ignores it/.test(on7.reason));
+});
+test('ts6 project with a 5.5 removal fails the scan, its 7.0 removal does not', () => {
+  const r = core.analyzeDir(FIX('ts6-tsconfig-removed'));
+  assert.strictEqual(sev(r.tsconfig.findings, 'charset'), 'conflict');
+  assert.strictEqual(sev(r.tsconfig.findings, 'target-es5'), 'warning');
+  assert.strictEqual(r.hasActiveConflict, true);
+  assert.strictEqual(r.activeConflictCount, 1);
+});
+
 section('tsconfig: advisories');
 test('advisories: strict-default + emitDecoratorMetadata w/ framework context', () => {
   const r = core.analyzeDir(FIX('tsconfig-advisories'));

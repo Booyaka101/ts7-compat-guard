@@ -10,6 +10,7 @@
  * merge), and reports:
  *
  *   - REMOVED options that are present  -> "conflict" on TS7, "warning" on TS6
+ *     (options already removed in 5.5 are "conflict" on 5.5+ as well)
  *   - RISK advisories (behavioural / uncertain) -> always "advisory"
  *
  * Design constraint: **manifest/config only, no source-file scanning.** Every
@@ -18,10 +19,14 @@
  *
  * Sources (verified 2026-07): TypeScript 7.0 GA announcement (Microsoft
  * devblog) and the TypeScript-Go decorators discussion (#741, unresolved).
+ * The option list and `removedIn` versions were re-checked 2026-09-27 against
+ * `verifyDeprecatedCompilerOptions` in typescript@6.0.3 and by running every
+ * rule through typescript@6.0.3 and 7.0.2 (scripts/tsc-probe.js).
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
+const semver = require('semver');
 
 const HELP_URI = 'https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/';
 const DECORATORS_URI = 'https://github.com/microsoft/typescript-go/discussions/741';
@@ -36,7 +41,13 @@ const DECORATORS_URI = 'https://github.com/microsoft/typescript-go/discussions/7
  * offending value (for the message) or null/undefined for "no match".
  *
  * `key` is the compilerOptions key we locate in the raw text for line/column.
+ * `removedIn` maps that value to the first release that rejects it; absent
+ * means 7.0.
  */
+// 5.5 through 6.x only reject these when switched on (`importsNotUsedAsValues:
+// "remove"` is the enum's zero); 7.0 rejects the key whatever its value.
+const sinceFiveFive = (v) => (v && String(v).toLowerCase() !== 'remove' ? '5.5' : '7.0');
+
 const REMOVED_OPTIONS = [
   {
     id: 'target-es5',
@@ -45,18 +56,19 @@ const REMOVED_OPTIONS = [
       const v = typeof o.target === 'string' ? o.target.toLowerCase() : null;
       return v === 'es5' || v === 'es3' ? o.target : null;
     },
+    removedIn: (v) => (String(v).toLowerCase() === 'es3' ? '5.5' : '7.0'),
     title: 'target "ES5"/"ES3" removed',
     reason:
-      'TypeScript 7.0 drops down-level emit below ES2015; `target: "es5"`/`"es3"` is no longer supported (minimum output is modern ES).',
+      'TypeScript 7.0 drops down-level emit below ES2015; `target: "es5"` is no longer supported (`"es3"` already went in 5.5).',
     fix: 'Raise `target` to `es2015` or later (e.g. `es2022`). Down-level to ES5 with a separate tool (esbuild/swc/Babel) if you still need it.',
   },
   {
     id: 'downlevel-iteration',
     key: 'downlevelIteration',
-    test: (o) => (o.downlevelIteration ? true : null),
+    test: (o) => (o.downlevelIteration != null ? o.downlevelIteration : null),
     title: 'downlevelIteration removed',
     reason:
-      '`downlevelIteration` only applied to pre-ES2015 targets, which TypeScript 7.0 no longer supports, so the option is removed.',
+      '`downlevelIteration` only applied to pre-ES2015 targets, which TypeScript 7.0 no longer supports, so the option is removed. Setting it to `false` is rejected too.',
     fix: 'Remove `downlevelIteration` and target `es2015`+ (native iteration).',
   },
   {
@@ -125,60 +137,94 @@ const REMOVED_OPTIONS = [
     id: 'out',
     key: 'out',
     test: (o) => (o.out != null ? o.out : null),
-    title: 'out removed (use outFile)',
+    removedIn: sinceFiveFive,
+    title: 'out removed',
     reason:
-      'The legacy `out` option (superseded by `outFile` years ago) is removed in TypeScript 7.0.',
-    fix: 'Replace `out` with `outFile`, or emit with a bundler.',
+      'The legacy `out` option was removed in TypeScript 5.5. Its successor `outFile` is itself removed in 7.0.',
+    fix: 'Remove `out` and produce a single-file bundle with a bundler.',
+  },
+  {
+    id: 'out-file',
+    key: 'outFile',
+    test: (o) => (o.outFile != null ? o.outFile : null),
+    title: 'outFile removed',
+    reason:
+      '`outFile` (concatenating the program into one script) is removed in TypeScript 7.0.',
+    fix: 'Remove `outFile` and produce a single-file bundle with a bundler.',
   },
   {
     id: 'imports-not-used-as-values',
     key: 'importsNotUsedAsValues',
     test: (o) => (o.importsNotUsedAsValues != null ? o.importsNotUsedAsValues : null),
+    removedIn: sinceFiveFive,
     title: 'importsNotUsedAsValues removed',
     reason:
-      '`importsNotUsedAsValues` was deprecated in favour of `verbatimModuleSyntax` and is removed in TypeScript 7.0.',
+      '`importsNotUsedAsValues` was deprecated in favour of `verbatimModuleSyntax` and was removed in TypeScript 5.5.',
     fix: 'Remove it and set `"verbatimModuleSyntax": true` if you need explicit type-only import elision.',
   },
   {
     id: 'preserve-value-imports',
     key: 'preserveValueImports',
     test: (o) => (o.preserveValueImports != null ? o.preserveValueImports : null),
+    removedIn: sinceFiveFive,
     title: 'preserveValueImports removed',
     reason:
-      '`preserveValueImports` was folded into `verbatimModuleSyntax` and is removed in TypeScript 7.0.',
+      '`preserveValueImports` was folded into `verbatimModuleSyntax` and removed in TypeScript 5.5.',
     fix: 'Remove it and use `"verbatimModuleSyntax": true`.',
   },
   {
     id: 'keyof-strings-only',
     key: 'keyofStringsOnly',
     test: (o) => (o.keyofStringsOnly != null ? o.keyofStringsOnly : null),
+    removedIn: sinceFiveFive,
     title: 'keyofStringsOnly removed',
-    reason: '`keyofStringsOnly` (a legacy TypeScript 2.9 flag) is removed in TypeScript 7.0.',
+    reason: '`keyofStringsOnly` (a legacy TypeScript 2.9 flag) was removed in TypeScript 5.5.',
     fix: 'Remove `keyofStringsOnly`.',
   },
   {
     id: 'no-implicit-use-strict',
     key: 'noImplicitUseStrict',
     test: (o) => (o.noImplicitUseStrict != null ? o.noImplicitUseStrict : null),
+    removedIn: sinceFiveFive,
     title: 'noImplicitUseStrict removed',
-    reason: '`noImplicitUseStrict` is removed in TypeScript 7.0.',
+    reason: '`noImplicitUseStrict` was removed in TypeScript 5.5.',
     fix: 'Remove `noImplicitUseStrict`.',
   },
   {
     id: 'no-strict-generic-checks',
     key: 'noStrictGenericChecks',
     test: (o) => (o.noStrictGenericChecks != null ? o.noStrictGenericChecks : null),
+    removedIn: sinceFiveFive,
     title: 'noStrictGenericChecks removed',
-    reason: '`noStrictGenericChecks` is removed in TypeScript 7.0.',
+    reason: '`noStrictGenericChecks` was removed in TypeScript 5.5.',
     fix: 'Remove `noStrictGenericChecks` and fix any generic variance errors it was masking.',
   },
   {
     id: 'charset',
     key: 'charset',
     test: (o) => (o.charset != null ? o.charset : null),
+    removedIn: sinceFiveFive,
     title: 'charset removed',
-    reason: '`charset` has been a no-op since TypeScript 1.8 and is removed in TypeScript 7.0.',
+    reason: '`charset` had been a no-op since TypeScript 1.8 and was removed in TypeScript 5.5.',
     fix: 'Remove `charset` (source files are read as UTF-8).',
+  },
+  {
+    id: 'suppress-excess-property-errors',
+    key: 'suppressExcessPropertyErrors',
+    test: (o) => (o.suppressExcessPropertyErrors != null ? o.suppressExcessPropertyErrors : null),
+    removedIn: sinceFiveFive,
+    title: 'suppressExcessPropertyErrors removed',
+    reason: '`suppressExcessPropertyErrors` was removed in TypeScript 5.5.',
+    fix: 'Remove it and fix the excess-property errors it was hiding.',
+  },
+  {
+    id: 'suppress-implicit-any-index-errors',
+    key: 'suppressImplicitAnyIndexErrors',
+    test: (o) => (o.suppressImplicitAnyIndexErrors != null ? o.suppressImplicitAnyIndexErrors : null),
+    removedIn: sinceFiveFive,
+    title: 'suppressImplicitAnyIndexErrors removed',
+    reason: '`suppressImplicitAnyIndexErrors` was removed in TypeScript 5.5.',
+    fix: 'Remove it and type the index accesses it was hiding (an index signature, or `Record<string, T>`).',
   },
 ];
 
@@ -460,11 +506,14 @@ function readTsconfig(tsconfigPath) {
  * Evaluate parsed tsconfig data into findings.
  *
  * @param {object} parsed result of readTsconfig
- * @param {object} ctx { ts7: boolean, deps: object }  deps = merged package.json deps
+ * @param {object} ctx { ts7: boolean, tsVersion: string|null, deps: object }
+ *   tsVersion = the TypeScript version analysed, deps = merged package.json deps
  * @returns {{ findings: Array, advisories: Array }}
  */
 function evaluateTsconfig(parsed, ctx = {}) {
   const ts7 = !!ctx.ts7;
+  const tsVersion = ctx.tsVersion ? semver.coerce(ctx.tsVersion) : null;
+  const rejectedBy = (since) => ts7 || (!!tsVersion && semver.gte(tsVersion, `${since}.0`));
   const options = parsed.options || {};
   const optionsSet = new Set(Object.keys(options));
   const findings = [];
@@ -477,6 +526,7 @@ function evaluateTsconfig(parsed, ctx = {}) {
     const hit = rule.test(options);
     if (hit === null || hit === undefined) continue;
     const loc = locateKey(raw, rule.key);
+    const since = typeof rule.removedIn === 'function' ? rule.removedIn(hit) : rule.removedIn || '7.0';
     findings.push({
       category: 'tsconfig',
       id: rule.id,
@@ -485,7 +535,7 @@ function evaluateTsconfig(parsed, ctx = {}) {
       title: rule.title,
       reason: rule.reason,
       fix: rule.fix,
-      severity: ts7 ? 'conflict' : 'warning',
+      severity: rejectedBy(since) ? 'conflict' : 'warning',
       file: rel,
       line: loc.line,
       column: loc.column,
@@ -493,7 +543,8 @@ function evaluateTsconfig(parsed, ctx = {}) {
     });
   }
 
-  // references[].prepend removed.
+  // references[].prepend: rejected by 5.5 through 6.x, but 7.0 accepts the key
+  // and ignores it, so there it is dead config rather than a failing build.
   if (Array.isArray(parsed.references) && parsed.references.some((r) => r && r.prepend)) {
     const loc = locateKey(raw, 'prepend');
     findings.push({
@@ -502,10 +553,11 @@ function evaluateTsconfig(parsed, ctx = {}) {
       option: 'references[].prepend',
       value: true,
       title: 'project-reference prepend removed',
-      reason:
-        '`prepend` on project references (concatenated `outFile` output) is removed in TypeScript 7.0.',
+      reason: ts7
+        ? '`prepend` on project references was removed in TypeScript 5.5. TypeScript 7.0 no longer rejects the key but ignores it, and `outFile`, which it concatenated into, is gone.'
+        : '`prepend` on project references (concatenated `outFile` output) was removed in TypeScript 5.5.',
       fix: 'Drop `prepend` and concatenate build output with a bundler if needed.',
-      severity: ts7 ? 'conflict' : 'warning',
+      severity: !ts7 && rejectedBy('5.5') ? 'conflict' : 'warning',
       file: rel,
       line: loc.line,
       column: loc.column,

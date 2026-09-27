@@ -930,7 +930,12 @@ function analyzeDir(dir, opts = {}) {
 
   if (opts.tsconfig !== false) {
     const deps = mergeDeps(pkg);
-    const ts = tsconfig.analyzeTsconfigDir(dir, { ts7: result.ts7, deps, root: dir });
+    const ts = tsconfig.analyzeTsconfigDir(dir, {
+      ts7: result.ts7,
+      tsVersion: result.typescript.effectiveVersion,
+      deps,
+      root: dir,
+    });
     result.tsconfig = {
       present: ts.present,
       path: ts.path,
