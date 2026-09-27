@@ -213,7 +213,7 @@ it cannot prove:
 | `--db <path>` | | JSON of extra `{ "pkg": { "reason", "fix" } }` entries to merge |
 | `--target-ts <v>` | `7.0.2` | Exact TypeScript version the installed-tree peer scan tests ranges against |
 | `--strict-peers` | off | Promote installed-tree peer findings from `warning` to `conflict` (they then fail `--mode fail`) |
-| `--strict-undetermined` | off | Treat an undetermined TypeScript version (unresolvable spec, nothing installed, no lockfile entry) as TypeScript 7, so Compiler-API conflicts fail instead of passing |
+| `--strict-undetermined` | off | Treat an undetermined TypeScript version (unresolvable spec, nothing installed, no lockfile entry) as TypeScript 7, so Compiler-API conflicts and removed tsconfig options fail instead of passing |
 | `--no-peers` | | Skip the installed-tree peer scan |
 | `--no-tsconfig` | | Skip tsconfig.json analysis (dependencies only) |
 | `--no-config` | | Do not read `.ts7guardrc.json` |
@@ -540,7 +540,7 @@ carry the same `ts7Ready` / `ts7Status` / `source` / `checkedAt` fields.
 ```bash
 npm install
 npm run build    # bundle src/action.js -> dist/action.js (esbuild; inlines semver + db.json)
-npm test         # 248 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, effective-TS resolution, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
+npm test         # 249 checks: core, tsconfig engine, readiness/shim/alias, installed-tree peer scan, effective-TS resolution, db --check, report, SARIF, CLI (in-process + spawned), Action, bundled dist
 npm run probe:tsc # every removed-option rule against real TypeScript 6 and 7 (installs both)
 ```
 
