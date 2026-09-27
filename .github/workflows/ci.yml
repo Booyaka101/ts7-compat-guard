@@ -51,6 +51,17 @@ jobs:
       # scripts/validate-action.js for why the wrapper exists.
       - run: npm run validate:action
 
+  tsc-probe:
+    # Every removed-option rule against the real TypeScript 6 and 7 compilers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run probe:tsc
+
   self-test:
     # Dogfood: run our own action against the repo's package.json.
     runs-on: ubuntu-latest

@@ -4,6 +4,48 @@ All notable changes to `ts7-compat-guard` are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [3.4.0] - 2026-09-27
+
+The removed-tsconfig-option rules, held against the real compilers for the
+first time. `scripts/tsc-probe.js` writes a sample of every rule into a
+throwaway project, compiles it with `typescript@6.0.3` and `typescript@7.0.2`,
+and fails if the guard's verdict disagrees with `tsc`. Run against 3.3.0 it
+found 20 disagreements. On TypeScript 7 alone, five were build breakers the
+guard did not report at all and one was a conflict on a build that works.
+
+### Fixed
+- **`outFile` is flagged.** TypeScript 7.0 removed it, and the guard only knew
+  about the older `out`. The `out` finding also stops telling you to switch to
+  `outFile`.
+- **`suppressExcessPropertyErrors` and `suppressImplicitAnyIndexErrors` are
+  flagged.** Both were removed in 5.5 and were missing from the list.
+- **`downlevelIteration: false` is flagged.** 7.0 rejects the key whatever its
+  value; the rule only matched `true`.
+- **`references[].prepend` is a `warning` on 7.0, not a `conflict`.** 7.0
+  accepts the key and ignores it, so `tsc -b` succeeds and the guard was failing
+  a build that works. It is now a `conflict` on 5.5 through 6.x, which do reject
+  it.
+
+### Changed
+- **Options TypeScript 5.5 already removed are a `conflict` on 5.5 and later,
+  not only on 7.0.** That is `target: es3`, `out`, `charset`,
+  `keyofStringsOnly`, `noImplicitUseStrict`, `noStrictGenericChecks`,
+  `importsNotUsedAsValues`, `preserveValueImports` and the two `suppress*`
+  flags. TypeScript 6 fails to compile with any of them set, even with
+  `ignoreDeprecations`, and the guard called them warnings. A TS6 repo carrying
+  one now exits 1; its `tsc` already did. Set to `false` (or
+  `importsNotUsedAsValues: "remove"`) they still compile on 6.x and stay
+  warnings there. The version comes from the same effective-TypeScript
+  resolution the dependency checks use; with no known version they stay
+  warnings.
+- **Ledger re-checked 2026-09-27.** `db --check` proposes no changes: every
+  bounded peer range still excludes 7.x (typescript-eslint 8.70.1 is still
+  `>=4.8.4 <6.1.0`), and `typescript@7.0.2` still exports no Compiler API, so
+  every entry stays `none`. `generatedAt` and each `checkedAt` move to
+  2026-09-27.
+- The README's `ts7Ready` notice example used typescript-eslint 8.70.0, which
+  has since shipped without TS7 support. It now says it is hypothetical.
+
 ## [3.3.0] - 2026-09-13
 
 A runtime change with no behaviour change. GitHub removes Node 20 from the
