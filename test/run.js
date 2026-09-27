@@ -1803,6 +1803,22 @@ test('action strict-undetermined input -> ::error:: + exit 1', () => {
   assert.ok(/::error::CONFLICT: typescript-eslint/.test(r.stdout), r.stdout);
 });
 
+test('removed tsconfig options follow it too', () => {
+  const dir = TMP('.tmp-undettsconfig');
+  writeTree(dir, {
+    'package.json': JSON.stringify({ devDependencies: { typescript: 'latest' } }),
+    'tsconfig.json': JSON.stringify({ compilerOptions: { baseUrl: '.' } }),
+  });
+  try {
+    assert.strictEqual(sev(core.analyzeDir(dir).tsconfig.findings, 'base-url'), 'warning');
+    const r = core.analyzeDir(dir, { strictUndetermined: true });
+    assert.strictEqual(sev(r.tsconfig.findings, 'base-url'), 'conflict');
+    assert.strictEqual(core.exitCodeFor(r, 'fail'), 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 section('v3.2: undetermined status + monorepo inheritance');
 test('an undetermined scan with zero findings is not reported clean', () => {
   const dir = TMP('.tmp-undetclean');

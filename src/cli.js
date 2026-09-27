@@ -60,8 +60,9 @@ Options:
                       When the effective TypeScript version cannot be
                       determined (unresolvable spec, nothing installed, no
                       lockfile entry), treat it as TypeScript 7 so
-                      Compiler-API conflicts fail instead of passing. Off by
-                      default: an unproven version is stated, not assumed.
+                      Compiler-API conflicts and removed tsconfig options
+                      fail instead of passing. Off by default: an unproven
+                      version is stated, not assumed.
   --no-peers          Skip the installed-tree peer scan
   --no-tsconfig       Skip tsconfig.json analysis (dependencies only)
   --no-config         Do not read .ts7guardrc.json

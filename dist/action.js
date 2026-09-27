@@ -3357,7 +3357,7 @@ var require_core = __commonJS({
       if (opts.tsconfig !== false) {
         const deps = mergeDeps(pkg);
         const ts = tsconfig.analyzeTsconfigDir(dir, {
-          ts7: result.ts7,
+          ts7: result.ts7 || result.typescript.assumedTs7,
           tsVersion: result.typescript.effectiveVersion,
           deps,
           root: dir
@@ -4401,7 +4401,7 @@ function writeSarif(results, root, version, file) {
   }
 }
 function safeVersion() {
-  if (true) return "3.4.0";
+  if (true) return "3.4.1";
   try {
     const fs2 = require("node:fs");
     const path2 = require("node:path");

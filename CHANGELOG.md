@@ -4,6 +4,16 @@ All notable changes to `ts7-compat-guard` are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [3.4.1] - 2026-09-27
+
+### Fixed
+- **`--strict-undetermined` now covers removed tsconfig options.** It is meant
+  to treat a TypeScript version the guard cannot prove as 7.0 for severity, and
+  the report says so, but only Compiler-API dependencies followed it. A
+  `baseUrl` in a repo declaring `typescript: "latest"` with nothing installed
+  stayed a `warning` and exited 0 under the flag. It is now a `conflict`, and
+  the flag's help text in the CLI, `action.yml` and README says what it covers.
+
 ## [3.4.0] - 2026-09-27
 
 The removed-tsconfig-option rules, held against the real compilers for the

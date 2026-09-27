@@ -58,7 +58,7 @@ inputs:
     description: >-
       Treat an undetermined TypeScript version (unresolvable spec, nothing
       installed, no lockfile entry) as TypeScript 7, so Compiler-API conflicts
-      fail instead of passing. Off by default.
+      and removed tsconfig options fail instead of passing. Off by default.
     required: false
     default: 'false'
 outputs:
